@@ -97,13 +97,13 @@ user command handlers updating spreadsheet
 event dispatchers
 */
 
-let expirationms; // updated in the handleConnectClick() function in bha-auth-scripts.js
+let tokenExpirationInMS;
 function isSignedIn() {
     let now = new Date();
     if (!gapi.client.getToken()) {
         return false;
     }
-    else if (now.getTime() > expirationms) {
+    else if (now.getTime() > tokenExpirationInMS) {
         gapi.client.setToken('');
         document.getElementById("connect_btn").textContent = 'sign in';
         document.getElementById("disconnect_btn").style.display = 'none';
@@ -115,7 +115,7 @@ function isSignedIn() {
 
 async function bha_signedin() {
     let now = new Date();
-    expirationms = now.getTime() + gapi.client.getToken().expires_in * 1000;
+    tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
     document.getElementById('connect_btn').textContent = 'sync';
     document.getElementById('setup_signin_instructions').style.display = 'none';
     document.getElementById('setup_create_new_journal').style.display = 'block';
