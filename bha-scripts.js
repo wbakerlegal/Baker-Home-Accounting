@@ -77,7 +77,7 @@ function flash(message) {
 }
 
 function insertCommas(float) {
-    let f = float.toString();
+    let f = parseFloat(float).toFixed(2);
     while ((f.indexOf('.') > 3 && f.indexOf(',') == -1) || f.indexOf(',') > 3) {
         f = f.substring(0, f.indexOf(',') == -1 ? f.indexOf('.') - 3 : f.indexOf(',') - 3) + ',' + f.substring(f.indexOf(',') == -1 ? f.indexOf('.') - 3 : f.indexOf(',') - 3);
     }
