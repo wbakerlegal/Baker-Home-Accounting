@@ -1,0 +1,427 @@
+/* Copyright 2024 William Baker
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
+/*
+#78CBF5 tint #DAEDF7
+#F5CD78
+#F5A778 tint #F5D8C6
+#5F6E75
+#75675F
+*/
+
+html {
+    font-family: 'Helvetica Neue', 'Helvetica', sans-serif;
+    background-color: #75675F;
+    min-height:100vh;
+}
+body {
+    margin: 0 auto;
+    position: relative;
+    max-width: 38rem;
+    min-width: 325px;
+    background-color: #fff;
+    min-height:100vh;
+}
+
+button {
+    background-color: #5F6E75;
+    color:#fff;
+    font-weight: bold;
+    padding:.5rem 0.5rem;
+    border-radius: .35rem;
+    border:0;
+}
+button:hover {
+    /*color: #F5A778;*/
+    background-color: #F5A778;
+}
+button:active {
+    background-color: #78CBF5;
+}
+button:disabled {
+    background-color:#75675F;
+    color: #ccc;
+}
+a, .fakea {
+    color:#78CBF5;
+    text-decoration: underline;
+}
+a:hover, .fakea:hover {
+    text-decoration: none;
+    color: #F5A778;
+}
+
+
+#top_border {
+    display:flex;
+    align-items: baseline;
+    background-color: #5F6E75;
+    font-family: 'Times New Roman', Times, serif;
+    color:#F5CD78;
+    padding: .5rem 1.5rem;
+    gap: .5rem;
+}
+
+#logo {
+    font-family: 'Times New Roman', Arial, sans-serif;
+    color: #78CBF5;
+}
+#top_title {
+    flex: 1 0.25 auto;
+}
+#navbar {
+    display: flex;
+    padding: 0.5rem 1.5rem;
+    align-items: baseline;
+}
+#nav_menu {
+    margin-right: 1rem;
+    padding: 0.5rem;
+    border-radius: .35rem;
+    border: 0;
+    background-color: #F5CD78;
+
+}
+#navbar_buttons {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    align-items: baseline;
+}
+#navbar_buttons button {
+    flex: 0 1 auto;
+}
+#navbar_buttons input {
+    flex: 0 1 auto;
+}
+.main {
+    padding:0 1.5rem;
+}
+#add_entry, #ledgers, #journal, #eom_rev, #rcrg, #edit_accts {
+    display: none;
+}
+#content {
+    padding-bottom: 4rem;
+}
+#footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    max-height: 2.25rem;
+    background-color: #5F6E75;
+    color: #F5CD78;
+    font-size: 0.8rem;
+    font-family: 'Times New Roman', Times, serif;
+}
+#footer_firstline {
+    padding: 0.75rem 1rem 0;
+    background-color: #5F6E75;
+}
+#footer_copyright {
+    font-style: italic;
+    font-size: 0.6rem;
+    background-color: #5F6E75;
+    padding: 0.75rem 1rem 0.5rem;
+    line-height: 1.1em;
+}
+
+.error {
+    border: 2px solid #F5A778;
+}
+
+/*ledger pane styles*/
+#ledgers nav {
+    display: flex;
+    gap: .5rem;
+    justify-content: center;
+    align-items: baseline;
+}
+.ledger_line {
+    padding-top: 0.5rem;
+    border-top: 1px solid #F5CD78;
+    margin-top: 0.5rem;
+}
+.ledger_summary {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: nowrap;
+    align-items: baseline;
+}
+.ledger_line:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+.ledger_line_arrow {
+    flex: 0 1 1rem;
+    text-align: center;
+}
+.ledger_line_arrow:hover {
+    color: #F5A778;
+}
+.ledger_line_arrow:active {
+    color: #78CBF5;
+}
+.ledger_acct {
+    font-weight: bold;
+    flex: 1 1 auto;
+}
+.ledger_net {
+    font-weight: bold;
+}
+.ledger_entries {
+    flex: 1 0 100%;
+    margin: 0.5rem 0 0 1.5rem;
+}
+.ledger_totals {
+    display: flex;
+    font-weight: bold;
+    margin-top: 0.5rem;
+}
+.ledger_tot_deb {
+    flex: 0 0 auto;
+    margin-left: auto;
+    text-align: right;
+    padding: 0.35rem 0;
+    border-top: 0.15rem double #000;
+    border-bottom: 0.15rem solid #000;
+}
+.ledger_tot_divider {
+    flex: 0 0 1rem;
+    text-align: center;
+    padding: 0.35rem 0;
+    border-top: 0.15rem double #000;
+    border-bottom: 0.15rem solid #000;
+}
+.ledger_tot_cred {
+    flex: 0 0 auto;
+    padding: 0.35rem 0;
+    border-top: 0.15rem double #000;
+    border-bottom: 0.15rem solid #000;
+}
+
+
+/* entry view styles */
+
+.entry {
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid #F5CD78;
+}
+.entry:first-child {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: 0;
+}
+.entry input, .entry select {
+    padding: 0.75rem .5rem;
+    border-radius: .35rem;
+    border: 0;
+    background-color: #DAEDF7;
+}
+
+.details {
+    display:flex;
+    gap: .25rem;
+    margin: 0 0 0.5rem;
+}
+.date {
+    flex: 0 1 38%;
+}
+.desc {
+    flex: 0 1 62%;
+}
+.rcrg_details {
+    flex: 0 1 auto;
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+}
+.entry_acct {
+    display:flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    margin: 0 0 .5rem;
+}
+.deb_acct, .cred_acct {
+    flex: 0 1 60%;
+    margin-right: .25rem;
+}
+.add_deb_acct, .add_cred_acct, .rem_deb_acct, .rem_cred_acct {
+    padding:.25rem;
+    margin:.5rem .1rem .5rem 0;
+    border-radius:0.1rem;
+}
+.deb_amt {
+    margin-right: auto;
+    text-align: right;
+}
+.cred_amt {
+    margin-left: auto;
+    text-align: right;
+}
+input.required, select.required {
+    border:.15rem solid #B06161;
+}
+.entry_summary {
+    display: flex;
+    gap: 0.25rem;
+    align-items: baseline;
+}
+/* recurring entry styles */
+.rcrg_template_countdown {
+    padding: 0.5rem;
+    border-radius: 0.2rem;
+    background-color: #DAEDF7;
+    color: #75675F;
+    font-style: italic;
+    font-size:0.8rem
+}
+
+
+/* setup page styles */
+#setup {
+    margin-top: .5rem;
+    color: #5F6E75;
+}
+#setup a, #setup .fakea {
+    color: #F5A778;
+    text-decoration: underline;
+}
+#setup a:hover, #setup .fakea:hover {
+    text-decoration: none;
+    color: #78CBF5;
+}
+
+#setup_signin_instructions {
+    font-weight: bold;
+    margin: 0.75rem 2.5rem;
+    font-size: 1.25rem;
+}
+#setup_journal_name, #cancel_edit_journal_name, #save_journal_name, #setup_create_new_journal, #setup_open_journal, #flash_msg_history, #setup_previous_journals {
+    display: none;
+}
+#setup_open_journal_line {
+    margin: 0.75rem 0;
+}
+#setup_open_journal_instructions {
+    display: none;
+    margin: .5em 1em;
+    line-height:1.5em;
+}
+
+/* end of month eom review styles */
+.eom_line {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-size:0.9em;
+}
+.eom_summary {
+    border-top : 3px double #75675F;
+    margin-top: 0.5rem;
+}
+.eom_last_month div, .eom_next_month div {
+    margin-top: 0.5rem;
+}
+.eom_summary_last_month {
+    margin-top: 0.75rem;
+}
+.eom_summary_last_month, .eom_summary_next_month {
+    display: flex;
+    gap: 0.75em;
+    margin-bottom: 0.75rem;
+}
+.eom_summary_month {
+    font-weight: bold;
+}
+
+
+/* edit acct styles */
+.ea_line {
+    padding-top: .5rem;
+    border-top: 1px solid #F5CD78;
+    margin-top: .5rem;
+}
+.ea_name_and_controls {
+    display: flex;
+    align-items: baseline;
+}
+.ea_arrow {
+    flex: 0 0 1.25rem;
+    text-align: center;
+}
+
+.ea_arrow:hover {
+    color: #F5A778;
+}
+.ea_arrow:active {
+    color: #78CBF5;
+}
+.ea_name {
+    flex: 0 1 auto;
+}
+.ea_controls {
+    margin-left: .5em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25em;
+}
+.ea_opts {
+    padding: .5rem 0 0 1.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em 1em;
+}
+.ea_opts label {
+    color: #75675F;
+    font-size: 0.9em;
+}
+.ea_budget_opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em 1em;
+}
+.ea_sub_accts {
+    margin-left: 1rem;
+}
+
+@media only screen and (max-width: 650px) {
+    body {
+      width: 100%;
+      border-left:2px solid #75675F;
+      border-right: 2px solid #75675F;
+      box-sizing: border-box;
+    }
+    #top_border {
+        padding: .25rem .5rem;
+    }
+    #logo {
+        font-size: 0.85em;
+    }
+    #navbar {
+        padding: 0.5rem;
+    }
+    .main {
+        padding: 0 0.5rem;
+    }
+    .ea_sub_accts {
+        margin-left: 0.5rem;
+    }
+    .ea_opts {
+        padding: .5rem 0 0;
+    }
+}

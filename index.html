@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>q͜ʘ Baker home accounting</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+        <link rel="manifest" href="icons/site.webmanifest">
+        <link rel="mask-icon" href="icons/safari-pinned-tab.svg" color="#5F6E75">
+        <meta name="msapplication-TileColor" content="#75675F">
+        <meta name="msapplication-config" content="icons/browserconfig.xml">
+        <meta name="theme-color" content="#5F6E75">
+        <link rel="stylesheet" href="bha-style.css">
+    </head>
+    <body>        
+        <div id="top_border">
+            <span id="logo">q͜ʘ</span>
+            <span id="top_title">Baker Home Accounting</span>
+            <span id="dash_links">
+                <span class="fakea" id="connect_btn" onclick="handleConnectClick()">sign in</span>
+                <span class="fakea" id="disconnect_btn" onclick="revokeToken()">disconnect</span>
+            </span>
+        </div>
+        <div id="content">
+            <div id="navbar">
+                <select id="nav_menu" name="nav_menu" disabled>
+                    <option value="add_entry">Add entry</option>
+                    <option value="ledgers">Ledgers</option>
+                    <option value="journal">Journal</option>
+                    <option value="eom_rev">Monthly Review</option>
+                    <option value="rcrg">Recurring items</option>
+                    <option value="edit_accts">Edit Accounts</option>
+                    <option selected value="setup">General Setup</option>
+                </select>
+                <div id="navbar_buttons">
+                </div>
+            </div>
+            <div id="add_entry" class="main"></div>
+            <div id="ledgers" class="main">
+                <nav>
+                    <label for="ledgers_accts_select">Account type:</label>
+                    <select id="ledgers_accts_select"></select>
+                    <button onclick="handleLedgersQuery()">View</button>
+                </nav>
+                <div id="ledgers_display"></div>
+            </div>
+            <div id="journal" class="main"></div>
+            <div id="eom_rev" class="main">
+                <div id="rev_viewpane">
+                </div>
+            </div>
+            <div id="rcrg" class="main"></div>
+            <div id="edit_accts" class="main"></div>        
+            <div id="setup" class="main">
+                <div id="setup_signin_instructions">First, sign in with your Google account using the link at the top.</div>
+                <div id="setup_journal_name">
+                    <label for="journal_name">Journal title:</label>
+                    <input id="journal_name" disabled>
+                    <button id="edit_journal_name">edit</button>
+                    <button id="cancel_edit_journal_name">cancel</button>
+                    <button id="save_journal_name">save</button>
+                </div>
+                <div id="setup_create_new_journal">
+                    <h4>Create a new journal:</h4>
+                    <div>
+                        <label for="new_ss_templates">using template:</label>
+                        <select id="new_ss_templates">
+                            <option value="">No template</option>
+                            <option value="home">Household</option>
+                            <option value="estate">Estate</option>
+                        </select>
+                        <button id="new_ss">create</button>
+                    </div>
+                </div>
+                <div id="setup_open_journal">
+                    <h4>Open journal:</h4>
+                    <div>
+                        Open an existing q͜ʘ journal using its Google Sheets ID. <span class="fakea" id="setup_open_journal_instructions_toggle">see instructions</span>
+                        <div id="setup_open_journal_instructions">
+                            The journal&#x2019;s spreadsheet ID can be found in its URL, in between the &#x2018;/d/&#x2019; and the &#x2018;/edit&#x2019;. Paste the spreadsheet ID, or the entire URL, into the following input. If on a mobile device, access the journal&#x2019;s Google Sheets URL by locating the journal in its creator&#x2019;s Google Sheets or Google Drive, change sharing permissions so that anyone with the link can view, then copy the sharing link. Immediately change the sharing permissions back to &#x2018;Restricted&#x2019; to reduce the possibility of unauthorized access to your information.
+                        </div>
+                        <div id="setup_open_journal_line">
+                            <label for="ssid">Spreadsheet ID:</label>
+                            <input id="ssid" placeholder="Google spreadsheet ID">
+                            <button id="open_journal_btn">open</button>
+                        </div>
+                        <div id="setup_previous_journals">
+                            <label for="open_journal_select">previously opened journals: </label>
+                            <select id="open_journal_select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="flash_msg_history"><h5>previous alerts this session:</h5></div>
+            </div>
+            <div id="footer">
+                <div id="footer_firstline">
+                    <span id="last_sync">last synced: n/a </span>
+                    <a title="Privacy Policy" href="privacy-policy.html">Privacy Policy</a>
+                </div>
+                <div id="footer_copyright">&copy; 2024 William Baker. Licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may obtain a copy of the License at <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
+            </div>
+        </div>
+        <script src="bha-auth-scripts.js"></script>
+        <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoad()"></script>
+        <script async defer src="https://accounts.google.com/gsi/client" onload="gisInit()"></script>
+        <script defer src="bha-scripts.js"></script>
+    </body>
+</html>
