@@ -63,6 +63,16 @@ a:hover, .fakea:hover {
     color: #F5A778;
 }
 
+input, select {
+    padding: 0.75rem .5rem;
+    border-radius: .35rem;
+    border: 0;
+    background-color: #DAEDF7;
+}
+input:disabled, select:disabled {
+    opacity: 0.7;
+    color: #75675F;
+}
 
 #top_border {
     display:flex;
@@ -224,12 +234,6 @@ a:hover, .fakea:hover {
     padding-top: 0;
     margin-top: 0;
     border-top: 0;
-}
-.entry input, .entry select {
-    padding: 0.75rem .5rem;
-    border-radius: .35rem;
-    border: 0;
-    background-color: #DAEDF7;
 }
 
 .details {
