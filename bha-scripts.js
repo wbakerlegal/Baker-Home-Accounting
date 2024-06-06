@@ -100,14 +100,21 @@ event dispatchers
 let tokenExpirationInMS;
 function isSignedIn() {
     let now = new Date();
+    let notSignedIn;
     if (!gapi.client.getToken()) {
-        return false;
-    }
-    else if (now.getTime() > tokenExpirationInMS) {
+        notSignedIn = true;
+    } else if (now.getTime() > tokenExpirationInMS) {
         gapi.client.setToken('');
         document.getElementById("connect_btn").textContent = 'sign in';
         document.getElementById("disconnect_btn").style.display = 'none';
+        notSignedIn = true;
+    } 
+    if (notSignedIn) {
         return false;
+        if (confirm('Must be signed in. Sign in now?')) {
+        } else {
+            return false;
+        }
     } else {
         return true;
     }
@@ -117,6 +124,7 @@ async function bha_signedin() {
     let now = new Date();
     tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
     document.getElementById('connect_btn').textContent = 'sync';
+    document.getElementById("disconnect_btn").style.display = "inline";
     document.getElementById('setup_signin_instructions').style.display = 'none';
     document.getElementById('setup_create_new_journal').style.display = 'block';
     document.getElementById('setup_open_journal').style.display = 'block';
@@ -432,7 +440,7 @@ function updateEntryOpts(entry_line, _type) {
     for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
         const select = i < els.deb_accts.length ? els.deb_accts[i] : els.cred_accts[i - els.deb_accts.length];
         const side =  i < els.deb_accts.length ? 'deb' : 'cred';
-        const acct_name = i < els.deb_accts.length ? entry_data.hasOwnProperty('deb_accts') ? entry_data.deb_accts[i] : '' : entry_data.hasOwnProperty('cred_accts') ? entry_data.cred_accts[i] : '';
+        const acct_name = i < els.deb_accts.length ? entry_data.hasOwnProperty('deb_accts') ? entry_data.deb_accts[i] : '' : entry_data.hasOwnProperty('cred_accts') ? entry_data.cred_accts[i - els.deb_accts.length] : '';
         while (select.firstChild) {
             select.firstChild.remove();
         }
@@ -712,6 +720,7 @@ function getEntryAcct(opts) {
 function getEntryInputElements(entry_container) {
     /* returns {
         entry_data: entryDataObj,
+        container:,
         date:,
         desc:,
         exp:,
@@ -737,6 +746,7 @@ function getEntryInputElements(entry_container) {
     let entryDataObj = JSON.parse(entry_container.dataset.origentry);
     let els = {
         entry_data: entryDataObj,
+        container: entry_container,
         deb_accts: [],
         rem_deb_acct_btns: [],
         deb_amts: [],
@@ -899,20 +909,66 @@ function subValidateAcctNames(els, errorsArr, quiet) {
     }
 }
 
+function entryAmtAutoComplete(els) {
+    if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
+        let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0);
+        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
+    } else {
+        let debits = 0;
+        let credits = 0;
+        let emptyAmts = 0;
+        for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
+            if (i < els.deb_amts.length) {
+                els.deb_amts[i].setAttribute('list', null);
+                if (!parseFloat(els.deb_amts[i].value)) {
+                    emptyAmts++;
+                } else {
+                    debits += parseFloat(els.deb_amts[i].value);
+                }
+            } else {
+                els.cred_amts[i - els.deb_amts.length].setAttribute('list', null);
+                if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
+                    emptyAmts++;
+                } else {
+                    credits += parseFloat(els.cred_amts[i - els.deb_amts.length].value);
+                }
+            }
+        }
+        console.log(emptyAmts);
+        if (emptyAmts == 1) {
+            let balance = Math.abs(debits - credits).toFixed(2);
+
+            console.log(balance);
+            let datalist = mk('datalist');
+            datalist.id = 'split_entry_difference';
+            let amt = mk('option');
+            amt.value = balance;
+            datalist.append(amt);
+            els.container.append(datalist);
+            for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
+                if (i < els.deb_amts.length) {
+                    if (!parseFloat(els.deb_amts[i].value)) {
+                        els.deb_amts[i].setAttribute('list', 'split_entry_difference');
+                        break;
+                    }
+                } else {
+                    if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
+                        els.cred_amts[i - els.deb_amts.length].setAttribute('list', 'split_entry_difference');
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 function lockUnlockEntryAmts(els) {
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         els.deb_amts[0].disabled = false;
         els.cred_amts[0].disabled = true;
-    }
-    if (els.deb_amts.length > 1 && els.cred_amts.length == 1) {
-        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
-        els.cred_amts[0].disabled = true;
-    }
-    if (els.deb_amts.length == 1 && els.cred_amts.length > 1) {
-        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
-        els.deb_amts[0].disabled = true;
-    }
-    if (els.deb_amts.length > 1 && els.cred_amts.length > 1) {
+    } else {
         for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
         for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
     }
@@ -920,34 +976,7 @@ function lockUnlockEntryAmts(els) {
 
 function subValidateEntryAmts(els, errorsArr, quiet) {
     lockUnlockEntryAmts(els);
-    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0);
-        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
-    }
-    if (els.deb_amts.length > 1 && els.cred_amts.length == 1) {
-        let amt = 0;
-        for (let i = 0; i < els.deb_amts.length; i++) {
-            let el = els.deb_amts[i];
-            amt += parseFloat(el.value ? el.value : 0);
-        }
-        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
-    }
-    if (els.deb_amts.length == 1 && els.cred_amts.length > 1) {
-        let amt = 0;
-        for (let i = 0; i < els.cred_amts.length; i++) {
-            el = els.cred_amts[i];
-            amt += parseFloat(el.value ? el.value : 0);
-        }
-        els.deb_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
-    }
-    if (els.deb_amts.length > 1 && els.cred_amts.length > 1) {
-        for (let i = 0; i < els.deb_amts.length; i++) {
-            el = els.deb_amts[i];
-        }
-        for (let i = 0; i < els.cred_amts.length; i++) {
-            el = els.cred_amts[i];
-        }
-    }
+    entryAmtAutoComplete(els);
     let debits = 0;
     let credits = 0;
     for (let i = 0; i < els.deb_amts.length; i++) {
@@ -1055,6 +1084,7 @@ function entryAddAcctClk(entry_container, side) {
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
     lockUnlockEntryAmts(els);
+    entryAmtAutoComplete(els);
     els.split.style.display = 'inline';
     els.add_deb.style.display = 'none';
     els.add_cred.style.display = 'none';
@@ -1066,6 +1096,7 @@ function entryRemAcctClk(entry_acct_div) {
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
     lockUnlockEntryAmts(els);
+    entryAmtAutoComplete(els);
 }
 function splitEntry(entry_line) {
     let els = getEntryInputElements(entry_line);
@@ -1151,9 +1182,9 @@ let addEntryClickHandler = function(e) {
 
 let addEntryChangeHandler = function(e) {
     if (e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) {
-        e.target.value = parseFloat(e.target.value).toFixed(2);
+        e.target.value = parseFloat(e.target.value) ? parseFloat(e.target.value).toFixed(2) : '';
         let entry_container = e.target.parentElement.parentElement.parentElement;
-        subValidateEntryAmts(getEntryInputElements(entry_container), [], true);
+        entryAmtAutoComplete(getEntryInputElements(entry_container));
     }
     if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
         if (e.target.value == '***') {
@@ -1841,6 +1872,7 @@ function getRcrgLine(e) {
 
     let s1 = document.createElement('span');
     s1.textContent = 'Recurring no. ';
+    s1.style.display = 'none';
 
     let rcrg_index = mkc('rcrg_index', 'input');
     rcrg_index.type = 'number';
@@ -1849,9 +1881,10 @@ function getRcrgLine(e) {
     rcrg_index.step = '1';
     rcrg_index.disabled = true;
     rcrg_index.value = e.index;
+    rcrg_index.style.display = 'none';
 
     let s2 = document.createElement('span');
-    s2.textContent = ": "
+    s2.textContent = "recurs "
 
     let rcrg_type = mkc('rcrg_type', 'select');
     rcrg_type.disabled = true;
@@ -1878,7 +1911,20 @@ function getRcrgLine(e) {
     rcrg_qty.value = e.hasOwnProperty('qty') ? e.qty : '';
 
     let on_text_2 = mkc('rcrg_on_text_2', 'span');
-    on_text_2.textContent = ' day of every ';
+    if (e.hasOwnProperty('qty')) {
+        const last = e.qty.toString().substring(e.qty.toString().length - 1);
+        if (last == '1') {
+            on_text_2.textContent = 'st day of every';
+        } else if (last == '2') {
+            on_text_2.textContent = 'nd day of every';
+        } else if (last == '3') {
+            on_text_2.textContent = 'rd day of every';
+        } else {
+            on_text_2.textContent = 'th day of every';
+        }
+    } else {
+        on_text_2.textContent = 'day of every';
+    }
     on_text_2.style.display = !e.hasOwnProperty('rcrtype') || e.rcrtype == 'on' ? 'inline' : 'none';
 
     let rcrg_period = mkc('rcrg_period', 'select');
@@ -1908,7 +1954,6 @@ function getRcrgLine(e) {
     }
     rcrg_period.value = e.hasOwnProperty('period') ? e.period : '';
     rcrg_details.append(s1, rcrg_index, s2, rcrg_type, on_text_1, rcrg_qty, on_text_2, rcrg_period);
-    details.append(rcrg_details);
 
     let deb_accts = mkc('deb_accts');
     if (deb_acctsVal.length == 0) {
@@ -1963,10 +2008,11 @@ function getRcrgLine(e) {
     countdown.textContent = `next on: ${mos[expectedDate.getMonth()]} ${expectedDate.getDate()}, ${expectedDate.getFullYear()}`;
     summary_div.append(edit_btn, cancel_btn, save_btn, delete_btn, inst_btn, countdown);
 
-    entry.append(typebox, details, deb_accts, cred_accts, summary_div);
+    entry.append(typebox, details, rcrg_details, deb_accts, cred_accts, summary_div);
     let els = getRcrgLineEls(entry);
     showHideEntryAcctBtns(els);
     lockUnlockEntryAmts(els);
+    entryAmtAutoComplete(els);
     return entry;
 }
 
@@ -2093,16 +2139,6 @@ function validateRcrgLine(line, quiet) {
 
 function rcrgTypeChanged(entry_container) {
     let els = getRcrgLineEls(entry_container);
-    if (els.rcrtype.value == 'on') {
-        els.onlbl1.style.display = 'inline';
-        els.onlbl2.style.display = 'inline';
-        while (els.period.firstChild) {
-            els.period.firstChild.remove();
-        }
-        for (const option of els.on_opts) {
-            els.period.append(option);
-        }
-    }
     if (els.rcrtype.value == 'every') {
         els.onlbl1.style.display = 'none';
         els.onlbl2.style.display = 'none';
@@ -2110,6 +2146,29 @@ function rcrgTypeChanged(entry_container) {
             els.period.firstChild.remove();
         }
         for (const option of els.every_opts) {
+            els.period.append(option);
+        }
+    } else {
+        els.onlbl1.style.display = 'inline';
+        els.onlbl2.style.display = 'inline';
+        let last = els.qty.value ? els.qty.value.toString().substring(els.qty.value.toString().length - 1) : '';
+        if (last) {
+            if (last == '1') {
+                els.onlbl2.textContent = 'st day of every';
+            } else if (last == '2') {
+                els.onlbl2.textContent = 'nd day of every';
+            } else if (last == '3') {
+                els.onlbl2.textContent = 'rd day of every';
+            } else {
+                els.onlbl2.textContent = 'th day of every';
+            }
+        } else {
+            els.onlbl2.textContent = 'day of every';
+        }
+        while (els.period.firstChild) {
+            els.period.firstChild.remove();
+        }
+        for (const option of els.on_opts) {
             els.period.append(option);
         }
     }
@@ -2398,8 +2457,8 @@ let rcrgClickHandler = function(e) {
 }
 
 let rcrgChangeHandler = function(e) {
-    if (e.target.classList.contains('rcrg_type')) {
-        let entry_container = e.target.parentElement.parentElement.parentElement;
+    if (e.target.classList.contains('rcrg_type') || e.target.classList.contains('rcrg_qty')) {
+        let entry_container = e.target.parentElement.parentElement;
         rcrgTypeChanged(entry_container);
     }
 }
@@ -2504,6 +2563,7 @@ function getEditAcctLine(acct) {
     name.value = acct.name;
     name.name = "edit_acct_name";
     name.size = acct.name.length > 20 ? acct.name.length : 20;
+    name.maxLength = '28';
     name.disabled = true;
     name.required = true;
     name_and_buttons.append(arrow, name);

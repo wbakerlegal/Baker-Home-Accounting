@@ -92,6 +92,7 @@ input:disabled, select:disabled {
 }
 #navbar {
     display: flex;
+    flex-wrap: wrap;
     padding: 0.5rem 1.5rem;
     align-items: baseline;
 }
@@ -266,12 +267,19 @@ input:disabled, select:disabled {
 .desc {
     flex: 0 1 62%;
 }
+.rcrg_template .desc {
+    flex: 1 1 100%;
+}
 .rcrg_details {
     flex: 0 1 auto;
     display: flex;
     gap: 0.25rem;
     flex-wrap: wrap;
     align-items: baseline;
+    margin-bottom: 0.5rem;
+    font-size: 0.8em;
+    color: #5F6E75;
+    font-weight: bold;
 }
 .entry_acct {
     display:flex;
@@ -384,6 +392,7 @@ input.required, select.required {
 }
 .ea_name_and_controls {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
 }
 .ea_arrow {
@@ -401,7 +410,7 @@ input.required, select.required {
     flex: 0 1 auto;
 }
 .ea_controls {
-    margin-left: .5em;
+    margin: 0.5rem 0 0 0.5rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.25em;

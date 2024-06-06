@@ -43,7 +43,7 @@ function gisInit() {
   checkBeforeStart();
 }
 
-function handleConnectClick() {
+async function handleConnectClick() {
 
   tokenClient.callback = (resp) => {
     if (resp.error !== undefined) {
@@ -52,8 +52,6 @@ function handleConnectClick() {
     // GIS has automatically updated gapi.client with the newly issued access token.
     //console.log('gapi.client access token: ' + JSON.stringify(gapi.client.getToken()));
     bha_signedin();
-    
-    document.getElementById("disconnect_btn").style.display = "inline";
   }
 
   // Conditionally ask users to select the Google Account they'd like to use,
