@@ -411,7 +411,6 @@ function goToPage(page) {
     document.getElementById(page).style.display = 'block';
     localStorage.setItem('lastPageViewed', page);
 
-    if (page == 'add_entry') initializeEntry();
     if (page == 'ledgers') initializeLedgers();
     if (page == 'eom_rev') initializeEomRev();
     if (page == 'rcrg') initializeRcrg();
@@ -424,21 +423,6 @@ let navbarChangeHandler = function(e) {
 }
 
 // END navbar control BEGIN Add Journal Entry
-function initializeEntry() {
-    let exp_btn = document.createElement('button');
-    exp_btn.onclick = function() {updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');};
-    exp_btn.textContent = 'expense';
-    let inc_btn = document.createElement('button');
-    inc_btn.onclick = function() {updateEntryOpts(document.getElementById('add_entry').firstChild, 'inc');};
-    inc_btn.textContent = 'income';
-    let tfr_btn = document.createElement('button');
-    tfr_btn.onclick = function() {updateEntryOpts(document.getElementById('add_entry').firstChild, 'tfr');};
-    tfr_btn.textContent = 'transfer';
-    let gen_btn = document.createElement('button');
-    gen_btn.onclick = function() {updateEntryOpts(document.getElementById('add_entry').firstChild, '');};
-    gen_btn.textContent = 'general';
-    document.getElementById('navbar_buttons').append(exp_btn, inc_btn, tfr_btn, gen_btn);
-}
 function updateEntryOpts(entry_line, _type) {
     let type = _type ? _type : '';
     let els = getEntryInputElements(entry_line);
@@ -448,7 +432,7 @@ function updateEntryOpts(entry_line, _type) {
     for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
         const select = i < els.deb_accts.length ? els.deb_accts[i] : els.cred_accts[i - els.deb_accts.length];
         const side =  i < els.deb_accts.length ? 'deb' : 'cred';
-        const acct_name = select.value ? select.value : '';
+        const acct_name = i < els.deb_accts.length ? entry_data.hasOwnProperty('deb_accts') ? entry_data.deb_accts[i] : '' : entry_data.hasOwnProperty('cred_accts') ? entry_data.cred_accts[i] : '';
         while (select.firstChild) {
             select.firstChild.remove();
         }
@@ -479,6 +463,30 @@ function updateEntryOpts(entry_line, _type) {
             select.append(opt);
         }
     }
+    if (type == 'exp') {
+        els.exp.classList.add('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == 'inc') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.add('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == 'tfr') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.add('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == '') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.add('active_type');
+    }
 }
 
 function newBlankEntry(type) {
@@ -498,7 +506,7 @@ function getEntryInputLine(e) {
     /*
     e = {
         type: exp/inc/tfr,
-        rcrg: index: int,
+        rcrgindex: int,
         date: 'yyyy-mm-dd',
         desc: string,
         deb_accts: [string],
@@ -518,6 +526,41 @@ function getEntryInputLine(e) {
 
     let entry = mkc('entry');
     entry.dataset.origentry = JSON.stringify(e);
+
+    let typebox = mkc('type_container');
+    let exp_btn = mkc('exp_btn', 'button');
+    exp_btn.textContent = 'expense';
+    exp_btn.disabled = true;
+    let inc_btn = mkc('inc_btn', 'button');
+    inc_btn.textContent = 'income';
+    inc_btn.disabled = true;
+    let tfr_btn = mkc('tfr_btn', 'button');
+    tfr_btn.textContent = 'transfer';
+    tfr_btn.disabled = true;
+    let gen_btn = mkc('gen_btn', 'button');
+    gen_btn.textContent = 'general';
+    gen_btn.disabled = true;
+    if (typeVal == 'exp') {
+        exp_btn.classList.add('active_type');
+    } else if (typeVal == 'inc') {
+        inc_btn.classList.add('active_type');
+    } else if (typeVal == 'tfr') {
+        tfr_btn.classList.add('active_type');
+    } else if (typeVal == '') {
+        gen_btn.classList.add('active_type');
+    }
+    let split_btn  = mkc('split_entry', 'button');
+    split_btn.textContent = 'split';
+    split_btn.disabled = true;
+    let add_deb = mkc('add_deb_acct', 'button');
+    add_deb.textContent = 'add debit';
+    add_deb.disabled = true;
+    add_deb.style.display = 'none';
+    let add_cred = mkc('add_cred_acct', 'button');
+    add_cred.textContent = 'add credit';
+    add_cred.disabled = true;
+    add_cred.style.display = 'none';
+    typebox.append(exp_btn, inc_btn, tfr_btn, gen_btn, split_btn, add_deb, add_cred);
 
     let details = mkc('details');
     
@@ -587,8 +630,9 @@ function getEntryInputLine(e) {
         mkrcrg_btn.style.display = e.hasOwnProperty('rcrgindex') ? 'none' : 'inline';
         summary_div.append(edit_btn, cancel_btn, save_btn, mkrcrg_btn);
     }
-    entry.append(details, deb_accts, cred_accts, summary_div);
-    subValidateEntryAcctBtns(getEntryInputElements(entry));
+    entry.append(typebox, details, deb_accts, cred_accts, summary_div);
+    const els = getEntryInputElements(entry);
+    showHideEntryAcctBtns(els);
     return entry;
 }
 
@@ -608,7 +652,7 @@ function getEntryAcct(opts) {
     let side = opts.hasOwnProperty('side') ? opts.side : 'deb';
     let type = opts.hasOwnProperty('type') ? opts.type : '';
     let acct_name = opts.hasOwnProperty('acct_name') ? opts.acct_name : '';
-    let amtVal = opts.hasOwnProperty('amt') ? parseFloat(opts.amt).toFixed(2) : '0.00';
+    let amtVal = opts.hasOwnProperty('amt') ? parseFloat(opts.amt).toFixed(2) : '';
 
     let div = mkc('entry_acct');
     let acct_select = mkc(`${side}_acct`, 'select');
@@ -642,10 +686,6 @@ function getEntryAcct(opts) {
         acct_select.append(opt);
     }
 
-    let add_button = mkc(`add_${side}_acct`, 'button');
-    add_button.textContent = '+';
-    add_button.disabled = true;
-
     let rem_button = mkc(`rem_${side}_acct`, 'button');
     rem_button.textContent = '\u2212';
     rem_button.disabled = true;
@@ -660,23 +700,33 @@ function getEntryAcct(opts) {
     amt.disabled = true;
     amt.value = amtVal;
     
-    div.append(acct_select, add_button, rem_button, amt);
+    div.append(acct_select);
+    if (side == 'deb') {
+        div.append(amt, rem_button);
+    } else {
+        div.append(rem_button, amt);
+    }
     return div;
 }
 
 function getEntryInputElements(entry_container) {
     /* returns {
         entry_data: entryDataObj,
+        date:,
+        desc:,
+        exp:,
+        inc:,
+        tfr:,
+        gen:,
+        split:,
+        add_deb:,
+        add_cred:,
         deb_accts: [],
-        add_deb_acct_btns: [],
         rem_deb_acct_btns: [],
         deb_amts: [],
         cred_accts: [],
-        add_cred_acct_btns: [],
         rem_cred_acct_btns: [],
         cred_amts: [],
-        date:,
-        desc:,
         submit:,
         edit:,
         cancel:,
@@ -688,11 +738,9 @@ function getEntryInputElements(entry_container) {
     let els = {
         entry_data: entryDataObj,
         deb_accts: [],
-        add_deb_acct_btns: [],
         rem_deb_acct_btns: [],
         deb_amts: [],
         cred_accts: [],
-        add_cred_acct_btns: [],
         rem_cred_acct_btns: [],
         cred_amts: [],
     };
@@ -710,9 +758,6 @@ function getEntryInputElements(entry_container) {
                 els.deb_accts.push(child);
                 continue;
             }
-            if (child.classList.contains('add_deb_acct')) {
-                els.add_deb_acct_btns.push(child);
-            }
             if (child.classList.contains('rem_deb_acct')) {
                 els.rem_deb_acct_btns.push(child);
             }
@@ -724,14 +769,39 @@ function getEntryInputElements(entry_container) {
                 els.cred_accts.push(child);
                 continue;
             }
-            if (child.classList.contains('add_cred_acct')) {
-                els.add_cred_acct_btns.push(child);
-            }
             if (child.classList.contains('rem_cred_acct')) {
                 els.rem_cred_acct_btns.push(child);
             }
             if (child.classList.contains('cred_amt')) {
                 els.cred_amts.push(child);
+                continue;
+            }
+            if (child.classList.contains('exp_btn')) {
+                els.exp = child;
+                continue;
+            }
+            if (child.classList.contains('inc_btn')) {
+                els.inc = child;
+                continue;
+            }
+            if (child.classList.contains('tfr_btn')) {
+                els.tfr = child;
+                continue;
+            }
+            if (child.classList.contains('gen_btn')) {
+                els.gen = child;
+                continue;
+            }
+            if (child.classList.contains('split_entry')) {
+                els.split = child;
+                continue;
+            }
+            if (child.classList.contains('add_deb_acct')) {
+                els.add_deb = child;
+                continue;
+            }
+            if (child.classList.contains('add_cred_acct')) {
+                els.add_cred = child;
                 continue;
             }
             if (child.classList.contains('submit_entry')) {
@@ -776,7 +846,7 @@ function validateEntryInputs(entry_container, quiet) {
     }
     subValidateDesc(els.desc, errors, quiet);
     subValidateAcctNames(els, errors, quiet);
-    subValidateEntryAcctBtns(els);
+    showHideEntryAcctBtns(els);
     subValidateEntryAmts(els, errors, quiet);
     
     if (errors.length > 0 && !quiet) {
@@ -829,41 +899,53 @@ function subValidateAcctNames(els, errorsArr, quiet) {
     }
 }
 
-function subValidateEntryAmts(els, errorsArr, quiet) {
+function lockUnlockEntryAmts(els) {
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         els.deb_amts[0].disabled = false;
         els.cred_amts[0].disabled = true;
+    }
+    if (els.deb_amts.length > 1 && els.cred_amts.length == 1) {
+        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
+        els.cred_amts[0].disabled = true;
+    }
+    if (els.deb_amts.length == 1 && els.cred_amts.length > 1) {
+        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
+        els.deb_amts[0].disabled = true;
+    }
+    if (els.deb_amts.length > 1 && els.cred_amts.length > 1) {
+        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
+        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
+    }
+}
+
+function subValidateEntryAmts(els, errorsArr, quiet) {
+    lockUnlockEntryAmts(els);
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0);
-        els.cred_amts[0].value = amt.toFixed(2);
+        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
     }
     if (els.deb_amts.length > 1 && els.cred_amts.length == 1) {
         let amt = 0;
         for (let i = 0; i < els.deb_amts.length; i++) {
             let el = els.deb_amts[i];
-            el.disabled = false;
             amt += parseFloat(el.value ? el.value : 0);
         }
-        els.cred_amts[0].disabled = true;
-        els.cred_amts[0].value = amt.toFixed(2);
+        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
     }
     if (els.deb_amts.length == 1 && els.cred_amts.length > 1) {
         let amt = 0;
         for (let i = 0; i < els.cred_amts.length; i++) {
             el = els.cred_amts[i];
-            el.disabled = false;
             amt += parseFloat(el.value ? el.value : 0);
         }
-        els.deb_amts[0].disabled = true;
-        els.deb_amts[0].value = amt.toFixed(2);
+        els.deb_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
     }
     if (els.deb_amts.length > 1 && els.cred_amts.length > 1) {
         for (let i = 0; i < els.deb_amts.length; i++) {
             el = els.deb_amts[i];
-            el.disabled = false;
         }
         for (let i = 0; i < els.cred_amts.length; i++) {
             el = els.cred_amts[i];
-            el.disabled = false;
         }
     }
     let debits = 0;
@@ -897,52 +979,28 @@ function subValidateEntryAmts(els, errorsArr, quiet) {
     }
 }
 
-function subValidateEntryAcctBtns(els) {
+function showHideEntryAcctBtns(els) {
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        els.add_deb_acct_btns[0].style.display = 'inline';
         els.rem_deb_acct_btns[0].style.display = 'none';
-        els.add_cred_acct_btns[0].style.display = 'inline';
         els.rem_cred_acct_btns[0].style.display = 'none';
     }
     if (els.deb_amts.length > 1 && els.cred_amts.length == 1) {
         for (let i = 0; i < els.deb_amts.length; i++) {
-            if (i < els.deb_amts.length - 1) {
-                els.add_deb_acct_btns[i].style.display = 'none'
-            } else if (i == els.deb_amts.length - 1) {
-                els.add_deb_acct_btns[i].style.display = 'inline';
-            }
             els.rem_deb_acct_btns[i].style.display = 'inline';
         }
-        els.add_cred_acct_btns[0].style.display = 'inline';
         els.rem_cred_acct_btns[0].style.display = 'none';
     }
     if (els.deb_amts.length == 1 && els.cred_amts.length > 1) {
         for (let i = 0; i < els.cred_amts.length; i++) {
-            if (i < els.cred_amts.length - 1) {
-                els.add_cred_acct_btns[i].style.display = 'none'
-            } else if (i == els.cred_amts.length - 1) {
-                els.add_cred_acct_btns[i].style.display = 'inline';
-            }
             els.rem_cred_acct_btns[i].style.display = 'inline';
         }
-        els.add_deb_acct_btns[0].style.display = 'inline';
         els.rem_deb_acct_btns[0].style.display = 'none';
     }
     if (els.deb_amts.length > 1 && els.cred_amts.length > 1) {
         for (let i = 0; i < els.deb_amts.length; i++) {
-            if (i < els.deb_amts.length - 1) {
-                els.add_deb_acct_btns[i].style.display = 'none'
-            } else if (i == els.deb_amts.length - 1) {
-                els.add_deb_acct_btns[i].style.display = 'inline';
-            }
             els.rem_deb_acct_btns[i].style.display = 'inline';
         }
         for (let i = 0; i < els.cred_amts.length; i++) {
-            if (i < els.cred_amts.length - 1) {
-                els.add_cred_acct_btns[i].style.display = 'none'
-            } else if (i == els.cred_amts.length - 1) {
-                els.add_cred_acct_btns[i].style.display = 'inline';
-            }
             els.rem_cred_acct_btns[i].style.display = 'inline';
         }
     }
@@ -977,22 +1035,43 @@ async function uploadEntryQueue(callback) {
     }
 }
 
-function entryAddAcctClk(accts_container, side) {
-    let entry_container = accts_container.parentElement;
+function entryAddAcctClk(entry_container, side) {
     let data = JSON.parse(entry_container.dataset.origentry);
     let type = data.hasOwnProperty('type') ? data.type : '';
     let div = getEntryAcct({side: side, type: type});
     for (const el of div.children) {
         el.disabled = false;
     }
-    accts_container.append(div);
-    subValidateEntryAcctBtns(getEntryInputElements(entry_container));
+    for (const accts_container of entry_container.children) {
+        if (accts_container.classList.contains('deb_accts') && side == 'deb') {
+            accts_container.append(div);
+            break;
+        }
+        if (accts_container.classList.contains('cred_accts') && side == 'cred') {
+            accts_container.append(div);
+            break;
+        }
+    }
+    let els = getEntryInputElements(entry_container);
+    showHideEntryAcctBtns(els);
+    lockUnlockEntryAmts(els);
+    els.split.style.display = 'inline';
+    els.add_deb.style.display = 'none';
+    els.add_cred.style.display = 'none';
 }
 
 function entryRemAcctClk(entry_acct_div) {
     let entry_container = entry_acct_div.parentElement.parentElement;
     entry_acct_div.remove();
-    subValidateEntryAcctBtns(getEntryInputElements(entry_container));
+    let els = getEntryInputElements(entry_container);
+    showHideEntryAcctBtns(els);
+    lockUnlockEntryAmts(els);
+}
+function splitEntry(entry_line) {
+    let els = getEntryInputElements(entry_line);
+    els.split.style.display = 'none';
+    els.add_deb.style.display = 'inline';
+    els.add_cred.style.display = 'inline';
 }
 
 function submitEntry(entry_container) {
@@ -1052,6 +1131,21 @@ let addEntryClickHandler = function(e) {
     } else if (e.target.classList.contains('submit_entry')) {
         let entry_container = e.target.parentElement.parentElement;
         submitEntry(entry_container);
+    } else if (e.target.classList.contains('exp_btn')) {
+        let entry_container = e.target.parentElement.parentElement;
+        updateEntryOpts(entry_container, 'exp');
+    } else if (e.target.classList.contains('inc_btn')) {
+        let entry_container = e.target.parentElement.parentElement;
+        updateEntryOpts(entry_container, 'inc');
+    } else if (e.target.classList.contains('tfr_btn')) {
+        let entry_container = e.target.parentElement.parentElement;
+        updateEntryOpts(entry_container, 'tfr');
+    } else if (e.target.classList.contains('gen_btn')) {
+        let entry_container = e.target.parentElement.parentElement;
+        updateEntryOpts(entry_container, '');
+    } else if (e.target.classList.contains('split_entry')) {
+        let entry_container = e.target.parentElement.parentElement;
+        splitEntry(entry_container);
     }
 }
 
@@ -1059,7 +1153,7 @@ let addEntryChangeHandler = function(e) {
     if (e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) {
         e.target.value = parseFloat(e.target.value).toFixed(2);
         let entry_container = e.target.parentElement.parentElement.parentElement;
-        if (!entry_container.classList.contains('rcrg_template')) subValidateEntryAmts(getEntryInputElements(entry_container), [], true);
+        subValidateEntryAmts(getEntryInputElements(entry_container), [], true);
     }
     if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
         if (e.target.value == '***') {
@@ -1072,6 +1166,12 @@ let addEntryChangeHandler = function(e) {
                 entry_line.after(div); 
             }
         }
+    }
+}
+
+let addEntryFocusHandler = function(e) {
+    if ((e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) && parseFloat(e.target.value) === 0 && e.target.value.includes('.')) {
+        e.target.value = '';
     }
 }
 
@@ -1277,6 +1377,13 @@ function editEntry(entry_line) {
     let els = getEntryInputElements(entry_line);
     els.date.disabled = false;
     els.desc.disabled = false;
+    els.exp.disabled = false;
+    els.inc.disabled = false;
+    els.tfr.disabled = false;
+    els.gen.disabled = false;
+    els.split.disabled = false;
+    els.add_deb.disabled = false;
+    els.add_cred.disabled = false;
     if (els.edit) {
         els.edit.style.display = 'none';
         els.edit.disabled = true;
@@ -1291,13 +1398,11 @@ function editEntry(entry_line) {
     }
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = false;
-        els.add_deb_acct_btns[i].disabled = false;
         els.rem_deb_acct_btns[i].disabled = false;
         els.deb_amts[i].disabled = false;
     }
     for (let i = 0; i < els.cred_accts.length; i++) {
         els.cred_accts[i].disabled = false;
-        els.add_cred_acct_btns[i].disabled = false;
         els.rem_cred_acct_btns[i].disabled = false;
         els.cred_amts[i].disabled = false;
     }
@@ -1308,6 +1413,13 @@ function cancelEditEntry(entry_line) {
     let els = getEntryInputElements(entry_line);
     els.date.disabled = true;
     els.desc.disabled = true;
+    els.exp.disabled = true;
+    els.inc.disabled = true;
+    els.tfr.disabled = true;
+    els.gen.disabled = true;
+    els.split.disabled = true;
+    els.add_deb.disabled = true;
+    els.add_cred.disabled = true;
     els.edit.style.display = 'inline';
     els.edit.disabled = false;
     els.cancel.style.display = 'none';
@@ -1316,13 +1428,11 @@ function cancelEditEntry(entry_line) {
     els.save.disabled = true;
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = true;
-        els.add_deb_acct_btns[i].disabled = true;
         els.rem_deb_acct_btns[i].disabled = true;
         els.deb_amts[i].disabled = true;
     }
     for (let i = 0; i < els.cred_accts.length; i++) {
         els.cred_accts[i].disabled = true;
-        els.add_cred_acct_btns[i].disabled = true;
         els.rem_cred_acct_btns[i].disabled = true;
         els.cred_amts[i].disabled = true;
     }
@@ -1622,22 +1732,7 @@ function initializeRcrg() {
     let create_rcrg_btn = document.createElement('button');
     create_rcrg_btn.textContent = 'New recurring entry';
     create_rcrg_btn.onclick = function() {
-        while (document.getElementById('navbar_buttons').firstChild) {
-            document.getElementById('navbar_buttons').firstChild.remove();
-        }
-        let exp_btn = document.createElement('button');
-        exp_btn.textContent = 'Recurring expense';
-        exp_btn.onclick = function() {createRcrg('exp');};
-        let inc_btn = document.createElement('button');
-        inc_btn.textContent = 'Recurring income';
-        inc_btn.onclick = function() {createRcrg('inc');};
-        let tfr_btn = document.createElement('button');
-        tfr_btn.textContent = 'Recurring transfer';
-        tfr_btn.onclick = function() {createRcrg('tfr');};
-        let gen_btn = document.createElement('button');
-        gen_btn.textContent = 'Recurring general entry';
-        gen_btn.onclick = function() {createRcrg('');};
-        document.getElementById('navbar_buttons').append(exp_btn, inc_btn, tfr_btn, gen_btn);
+        createRcrg('exp');
     }
     document.getElementById('navbar_buttons').append(create_rcrg_btn);
     populateRcrg();
@@ -1698,6 +1793,41 @@ function getRcrgLine(e) {
     entry.classList.add('rcrg_template');
     entry.dataset.origentry = JSON.stringify(e);
 
+    let typebox = mkc('type_container');
+    let exp_btn = mkc('exp_btn', 'button');
+    exp_btn.textContent = 'expense';
+    exp_btn.disabled = true;
+    let inc_btn = mkc('inc_btn', 'button');
+    inc_btn.textContent = 'income';
+    inc_btn.disabled = true;
+    let tfr_btn = mkc('tfr_btn', 'button');
+    tfr_btn.textContent = 'transfer';
+    tfr_btn.disabled = true;
+    let gen_btn = mkc('gen_btn', 'button');
+    gen_btn.textContent = 'general';
+    gen_btn.disabled = true;
+    if (typeVal == 'exp') {
+        exp_btn.classList.add('active_type');
+    } else if (typeVal == 'inc') {
+        inc_btn.classList.add('active_type');
+    } else if (typeVal == 'tfr') {
+        tfr_btn.classList.add('active_type');
+    } else if (typeVal == '') {
+        gen_btn.classList.add('active_type');
+    }
+    let split_btn  = mkc('split_entry', 'button');
+    split_btn.textContent = 'split';
+    split_btn.disabled = true;
+    let add_deb = mkc('add_deb_acct', 'button');
+    add_deb.textContent = 'add debit';
+    add_deb.disabled = true;
+    add_deb.style.display = 'none';
+    let add_cred = mkc('add_cred_acct', 'button');
+    add_cred.textContent = 'add credit';
+    add_cred.disabled = true;
+    add_cred.style.display = 'none';
+    typebox.append(exp_btn, inc_btn, tfr_btn, gen_btn, split_btn, add_deb, add_cred);
+
     let details = mkc('details');
 
     let desc = mkc('desc','input');
@@ -1737,7 +1867,7 @@ function getRcrgLine(e) {
 
     let on_text_1 = mkc('rcrg_on_text_1', 'span');
     on_text_1.textContent = ' the ';
-    on_text_1.style.display = e.type == 'on' ? 'inline' : 'none';
+    on_text_1.style.display = !e.hasOwnProperty('rcrtype') || e.rcrtype == 'on' ? 'inline' : 'none';
 
     let rcrg_qty = mkc('rcrg_qty', 'input');
     rcrg_qty.type = 'number';
@@ -1749,7 +1879,7 @@ function getRcrgLine(e) {
 
     let on_text_2 = mkc('rcrg_on_text_2', 'span');
     on_text_2.textContent = ' day of every ';
-    on_text_2.style.display = e.type == 'on' ? 'inline' : 'none';
+    on_text_2.style.display = !e.hasOwnProperty('rcrtype') || e.rcrtype == 'on' ? 'inline' : 'none';
 
     let rcrg_period = mkc('rcrg_period', 'select');
     rcrg_period.disabled = true;
@@ -1833,8 +1963,10 @@ function getRcrgLine(e) {
     countdown.textContent = `next on: ${mos[expectedDate.getMonth()]} ${expectedDate.getDate()}, ${expectedDate.getFullYear()}`;
     summary_div.append(edit_btn, cancel_btn, save_btn, delete_btn, inst_btn, countdown);
 
-    entry.append(details, deb_accts, cred_accts, summary_div);
-    subValidateEntryAcctBtns(getRcrgLineEls(entry));
+    entry.append(typebox, details, deb_accts, cred_accts, summary_div);
+    let els = getRcrgLineEls(entry);
+    showHideEntryAcctBtns(els);
+    lockUnlockEntryAmts(els);
     return entry;
 }
 
@@ -1842,12 +1974,17 @@ function getRcrgLineEls(line) {
     /* returns {
         entry_data: rcrgTemplateObj,
         desc:,
+        exp:,
+        inc:,
+        tfr:,
+        gen:,
+        split:,
+        add_deb:,
+        add_cred:,
         deb_accts: [],
-        add_deb_acct_btns: [],
         rem_deb_acct_btns: [],
         deb_amts: [],
         cred_accts: [],
-        add_cred_acct_btns: [],
         rem_cred_acct_btns: [],
         cred_amts: [],
         on_opts: [...],
@@ -1939,7 +2076,8 @@ function validateRcrgLine(line, quiet) {
     }
 
     subValidateDesc(els.desc, errors, quiet);
-    subValidateEntryAcctBtns(els);
+    subValidateEntryAmts(els, errors, quiet);
+    showHideEntryAcctBtns(els);
     
     if (errors.length > 0 && !quiet) {
         let text = '';
@@ -1955,7 +2093,7 @@ function validateRcrgLine(line, quiet) {
 
 function rcrgTypeChanged(entry_container) {
     let els = getRcrgLineEls(entry_container);
-    if (els.type.value == 'on') {
+    if (els.rcrtype.value == 'on') {
         els.onlbl1.style.display = 'inline';
         els.onlbl2.style.display = 'inline';
         while (els.period.firstChild) {
@@ -1965,7 +2103,7 @@ function rcrgTypeChanged(entry_container) {
             els.period.append(option);
         }
     }
-    if (els.type.value == 'every') {
+    if (els.rcrtype.value == 'every') {
         els.onlbl1.style.display = 'none';
         els.onlbl2.style.display = 'none';
         while (els.period.firstChild) {
@@ -2004,6 +2142,7 @@ function createRcrg(type) {
     els.cancel.classList.add('cancel_new_entry');
     els.save.classList.remove('save_rcrg');
     els.save.classList.add('submit_new_rcrg');
+    els.save.textContent = 'Submit new recurring entry'
     els.edit.remove();
     els.delete.remove();
     els.inst.remove();
@@ -2066,18 +2205,24 @@ function editRcrg(entry_line) {
     els.qty.disabled = false;
     els.period.disabled = false;
     els.desc.disabled = false;
+    els.exp.disabled = false;
+    els.inc.disabled = false;
+    els.tfr.disabled = false;
+    els.gen.disabled = false;
+    els.split.disabled = false;
+    els.add_deb.disabled = false;
+    els.add_cred.disabled = false;
     els.edit.style.display = 'none';
+    els.save.style.display = 'inline';
     els.cancel.style.display = 'inline';
     els.delete.style.display = 'inline';
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = false;
-        els.add_deb_acct_btns[i].disabled = false;
         els.rem_deb_acct_btns[i].disabled = false;
         els.deb_amts[i].disabled = false;
     }
     for (let i = 0; i < els.cred_accts.length; i++) {
         els.cred_accts[i].disabled = false;
-        els.add_cred_acct_btns[i].disabled = false;
         els.rem_cred_acct_btns[i].disabled = false;
         els.cred_amts[i].disabled = false;
     }
@@ -2089,18 +2234,24 @@ function cancelRcrg(entry_line) {
     els.qty.disabled = true;
     els.period.disabled = true;
     els.desc.disabled = true;
+    els.exp.disabled = true;
+    els.inc.disabled = true;
+    els.tfr.disabled = true;
+    els.gen.disabled = true;
+    els.split.disabled = true;
+    els.add_deb.disabled = true;
+    els.add_cred.disabled = true;
     els.edit.style.display = 'inline';
+    els.save.style.display = 'none';
     els.cancel.style.display = 'none';
     els.delete.style.display = 'none';
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = true;
-        els.add_deb_acct_btns[i].disabled = true;
         els.rem_deb_acct_btns[i].disabled = true;
         els.deb_amts[i].disabled = true;
     }
     for (let i = 0; i < els.cred_accts.length; i++) {
         els.cred_accts[i].disabled = true;
-        els.add_cred_acct_btns[i].disabled = true;
         els.rem_cred_acct_btns[i].disabled = true;
         els.cred_amts[i].disabled = true;
     }
@@ -4330,6 +4481,7 @@ newBlankEntry('exp');
 document.getElementById('content').addEventListener('change', navbarChangeHandler);
 document.getElementById('content').addEventListener('click', addEntryClickHandler);
 document.getElementById('content').addEventListener('change', addEntryChangeHandler);
+document.getElementById('content').addEventListener('focus', addEntryFocusHandler);
 document.getElementById('content').addEventListener('click', ledgersClickHandler);
 document.getElementById('content').addEventListener('click', journalClickHandler);
 document.getElementById('content').addEventListener('click', eomClickHandler);

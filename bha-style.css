@@ -43,16 +43,15 @@ button {
     border-radius: .35rem;
     border:0;
 }
-button:hover {
+button:hover:not(:disabled) {
     /*color: #F5A778;*/
     background-color: #F5A778;
 }
-button:active {
+button:active:not(:disabled) {
     background-color: #78CBF5;
 }
 button:disabled {
-    background-color:#75675F;
-    color: #ccc;
+    opacity: 0.7;
 }
 a, .fakea {
     color:#78CBF5;
@@ -235,7 +234,27 @@ input:disabled, select:disabled {
     margin-top: 0;
     border-top: 0;
 }
+.type_container {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+.type_container button {
+    padding: 0.3rem;
+    font-weight: bold;
+    font-size: 0.35em;
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+.type_container button:hover:not(:disabled) {
+    background-color: #78CBF5;
+}
 
+.type_container button.active_type {
+    /*background-color: #F5CD78;*/
+    background-color: #78CBF5;
+}
 .details {
     display:flex;
     gap: .25rem;
@@ -256,7 +275,7 @@ input:disabled, select:disabled {
 }
 .entry_acct {
     display:flex;
-    flex-wrap: wrap;
+    /*flex-wrap: wrap;*/
     gap: .25rem;
     margin: 0 0 .5rem;
 }
@@ -264,7 +283,10 @@ input:disabled, select:disabled {
     flex: 0 1 60%;
     margin-right: .25rem;
 }
-.add_deb_acct, .add_cred_acct, .rem_deb_acct, .rem_cred_acct {
+.type_container .add_deb_acct:hover:not(:disabled), .type_container  .add_cred_acct:hover:not(:disabled),  .type_container  .split_entry:hover:not(:disabled) {
+    background-color: #F5A778;
+}
+.rem_deb_acct, .rem_cred_acct {
     padding:.25rem;
     margin:.5rem .1rem .5rem 0;
     border-radius:0.1rem;
