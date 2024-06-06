@@ -1059,9 +1059,9 @@ function addToEntryQueue(entries) {
         }
         localStorage.setItem('entryQueue', JSON.stringify(queued));
     }
-    if (isSignedIn()) { // no prompt if no callback specified, so that we don't have to bug the user with a question for multiple offline entries
+    if (isSignedIn()) {
         uploadEntryQueue();
-    } else if (queued.length == entries.length) { // this is the first offline entry, so ask the question
+    } else if (queued.length == entries.length) {
         if (confirm('Entry stored on your device until next sign-in. Sync now?')) {
             tokenClient.callback = (resp) => {
                 if (resp.error !== undefined) {
@@ -1076,7 +1076,7 @@ function addToEntryQueue(entries) {
             }
         }
     } else {
-        flash('Entry stored. Sign in to sync.'); // plain alert, no question to interfere with attention
+        flash('Entry stored. Sign in to sync.');
     }
 
 }
@@ -1546,44 +1546,42 @@ function saveEntry(entry_line) {
 }
 
 function mkRcrg(entry_line) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let els = getEntryInputElements(entry_line);
-    let newIndex = getNewRcrgIndex();
-    let template = {
-        type: els.entry_data.hasOwnProperty('type') ? els.entry_data.type : '',
-        index: newIndex,
-        desc: els.desc.value,
-        deb_accts: [],
-        deb_amts: [],
-        cred_accts: [],
-        cred_amts: [],
-    }
-    for (let i = 0; i < els.deb_accts.length; i++) {
-        template.deb_accts.push(els.deb_accts[i].value);
-        template.deb_amts.push(els.deb_amts[i].value);
-    }
-    for (let i = 0; i < els.cred_accts.length; i++) {
-        template.cred_accts.push(els.cred_accts[i].value);
-        template.cred_amts.push(els.cred_amts[i].value);
-    }
-    let div = getRcrgLine(template);
-    let templateEls = getRcrgLineEls(div);
-    editRcrg(div);
-    templateEls.cancel.classList.remove('cancel_rcrg');
-    templateEls.cancel.classList.add('cancel_new_entry');
-    templateEls.cancel.style.display = 'inline';
-    templateEls.edit.remove();
-    templateEls.inst.remove();
-    templateEls.delete.remove();
-    templateEls.countdown.remove();
-    templateEls.save.classList.remove('save_rcrg');
-    templateEls.save.classList.add('submit_new_rcrg');
-    templateEls.save.textContent = 'submit recurring entry template';
-    templateEls.save.style.display = 'inline';
-    entry_line.after(div);
+    isSignedIn(() => {
+        let els = getEntryInputElements(entry_line);
+        let newIndex = getNewRcrgIndex();
+        let template = {
+            type: els.entry_data.hasOwnProperty('type') ? els.entry_data.type : '',
+            index: newIndex,
+            desc: els.desc.value,
+            deb_accts: [],
+            deb_amts: [],
+            cred_accts: [],
+            cred_amts: [],
+        }
+        for (let i = 0; i < els.deb_accts.length; i++) {
+            template.deb_accts.push(els.deb_accts[i].value);
+            template.deb_amts.push(els.deb_amts[i].value);
+        }
+        for (let i = 0; i < els.cred_accts.length; i++) {
+            template.cred_accts.push(els.cred_accts[i].value);
+            template.cred_amts.push(els.cred_amts[i].value);
+        }
+        let div = getRcrgLine(template);
+        let templateEls = getRcrgLineEls(div);
+        editRcrg(div);
+        templateEls.cancel.classList.remove('cancel_rcrg');
+        templateEls.cancel.classList.add('cancel_new_entry');
+        templateEls.cancel.style.display = 'inline';
+        templateEls.edit.remove();
+        templateEls.inst.remove();
+        templateEls.delete.remove();
+        templateEls.countdown.remove();
+        templateEls.save.classList.remove('save_rcrg');
+        templateEls.save.classList.add('submit_new_rcrg');
+        templateEls.save.textContent = 'submit recurring entry template';
+        templateEls.save.style.display = 'inline';
+        entry_line.after(div);
+    });
 }
 
 let journalClickHandler = function(e) {
@@ -2377,7 +2375,7 @@ async function saveRcrg(entry_line) {
                 [entries],
                 async function() {
                     await bha_sync();
-                    flash('Recurring entry template saved');
+                    flash('Recurring template saved');
                     entry_line.remove();
                     populateRcrg();
                 }
