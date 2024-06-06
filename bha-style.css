@@ -442,7 +442,7 @@ input.required, select.required {
       box-sizing: border-box;
     }
     #top_border {
-        padding: .25rem .5rem;
+        padding: .5rem;
     }
     #logo {
         font-size: 0.85em;

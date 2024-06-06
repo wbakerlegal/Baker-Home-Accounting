@@ -98,7 +98,8 @@ event dispatchers
 */
 
 let tokenExpirationInMS;
-function isSignedIn() {
+
+function isSignedIn(callback) {
     let now = new Date();
     let notSignedIn;
     if (!gapi.client.getToken()) {
@@ -110,12 +111,29 @@ function isSignedIn() {
         notSignedIn = true;
     } 
     if (notSignedIn) {
-        return false;
-        if (confirm('Must be signed in. Sign in now?')) {
+        if (callback !== undefined) {
+            if (confirm('Must be signed in. Sign in now?')) {
+                tokenClient.callback = (resp) => {
+                    if (resp.error !== undefined) {
+                        throw(resp);
+                    }
+                    bha_signedin();
+                    callback();
+                    return true;
+                }
+                if (gapi.client.getToken() === null) {
+                    tokenClient.requestAccessToken();
+                } else {
+                    tokenClient.requestAccessToken();
+                }
+            } else {
+                return false;
+            }
         } else {
             return false;
         }
     } else {
+        if (callback) callback();
         return true;
     }
 }
@@ -124,7 +142,7 @@ async function bha_signedin() {
     let now = new Date();
     tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
     document.getElementById('connect_btn').textContent = 'sync';
-    document.getElementById("disconnect_btn").style.display = "inline";
+    document.getElementById('disconnect_btn').style.display = 'inline';
     document.getElementById('setup_signin_instructions').style.display = 'none';
     document.getElementById('setup_create_new_journal').style.display = 'block';
     document.getElementById('setup_open_journal').style.display = 'block';
@@ -935,11 +953,8 @@ function entryAmtAutoComplete(els) {
                 }
             }
         }
-        console.log(emptyAmts);
         if (emptyAmts == 1) {
             let balance = Math.abs(debits - credits).toFixed(2);
-
-            console.log(balance);
             let datalist = mk('datalist');
             datalist.id = 'split_entry_difference';
             let amt = mk('option');
@@ -1044,10 +1059,24 @@ function addToEntryQueue(entries) {
         }
         localStorage.setItem('entryQueue', JSON.stringify(queued));
     }
-    if (isSignedIn()) {
+    if (isSignedIn()) { // no prompt if no callback specified, so that we don't have to bug the user with a question for multiple offline entries
         uploadEntryQueue();
+    } else if (queued.length == entries.length) { // this is the first offline entry, so ask the question
+        if (confirm('Entry stored on your device until next sign-in. Sync now?')) {
+            tokenClient.callback = (resp) => {
+                if (resp.error !== undefined) {
+                    throw(resp);
+                }
+                bha_signedin(); // upload entries happens here
+            }
+            if (gapi.client.getToken() === null) {
+                tokenClient.requestAccessToken();
+            } else {
+                tokenClient.requestAccessToken();
+            }
+        }
     } else {
-        flash(queued.length + ' journal entry lines waiting. Sign in to upload.');
+        flash('Entry stored. Sign in to sync.'); // plain alert, no question to interfere with attention
     }
 
 }
@@ -1188,13 +1217,12 @@ let addEntryChangeHandler = function(e) {
     }
     if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
         if (e.target.value == '***') {
-            if (!isSignedIn()) {
-                flash('Must be signed in.')
-                e.target.value = '';
-            } else {
+            if (!isSignedIn(() => {
                 let entry_line = e.target.parentElement.parentElement.parentElement;
                 let div = getNewAcctLine();
                 entry_line.after(div); 
+            })) {
+                e.target.value = '';
             }
         }
     }
@@ -1469,53 +1497,52 @@ function cancelEditEntry(entry_line) {
     }
 }
 
-async function saveEntry(entry_line) { 
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else if (validateEntryInputs(entry_line)) {
-        let els = getEntryInputElements(entry_line);
-        let entries = [];
-        let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
-        for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-            let entry = [
-                els.date.value,
-                els.entry_data.hasOwnProperty('rcrgindex') ? els.desc.value + 'RCRG' + els.entry_data.rcrgindex : els.desc.value
-            ];
-            if (i < els.deb_accts.length) {
-                entry.push(els.deb_accts[i].value);
-                entry.push(els.deb_amts[i].value);
-                entry.push('');
-            } else {
-                let j = i - els.deb_accts.length;
-                entry.push(els.cred_accts[j].value);
-                entry.push('');
-                entry.push(els.cred_amts[j].value);
+function saveEntry(entry_line) { 
+    isSignedIn(() => {
+        if (validateEntryInputs(entry_line)) {
+            let els = getEntryInputElements(entry_line);
+            let entries = [];
+            let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
+            for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+                let entry = [
+                    els.date.value,
+                    els.entry_data.hasOwnProperty('rcrgindex') ? els.desc.value + 'RCRG' + els.entry_data.rcrgindex : els.desc.value
+                ];
+                if (i < els.deb_accts.length) {
+                    entry.push(els.deb_accts[i].value);
+                    entry.push(els.deb_amts[i].value);
+                    entry.push('');
+                } else {
+                    let j = i - els.deb_accts.length;
+                    entry.push(els.cred_accts[j].value);
+                    entry.push('');
+                    entry.push(els.cred_amts[j].value);
+                }
+                entries.push(entry);
             }
-            entries.push(entry);
-        }
-        if (entries.length > origNumberRows) {
-            let rowsToAdd = entries.length - origNumberRows;
-            let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
-            let endIndex = startIndex + rowsToAdd;
-            insertRows('Journal', startIndex, endIndex)
-        }
-        if (entries.length < origNumberRows) {
-            let rowsToDelete = origNumberRows - entries.length;
-            let start = els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete;
-            let end = els.entry_data.starting_sheet_row_index + origNumberRows;
-            deleteRows('Journal', start, end);
-        }
-        batchUpdateValues(
-            ['Journal!A' + els.entry_data.starting_sheet_row_index],
-            [entries],
-            function() {
-                bha_sync();
-                flash('Entry saved');
-                cancelEditEntry(entry_line);
+            if (entries.length > origNumberRows) {
+                let rowsToAdd = entries.length - origNumberRows;
+                let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
+                let endIndex = startIndex + rowsToAdd;
+                insertRows('Journal', startIndex, endIndex)
             }
-        )
-    }
+            if (entries.length < origNumberRows) {
+                let rowsToDelete = origNumberRows - entries.length;
+                let start = els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete;
+                let end = els.entry_data.starting_sheet_row_index + origNumberRows;
+                deleteRows('Journal', start, end);
+            }
+            batchUpdateValues(
+                ['Journal!A' + els.entry_data.starting_sheet_row_index],
+                [entries],
+                function() {
+                    bha_sync();
+                    flash('Entry saved');
+                    cancelEditEntry(entry_line);
+                }
+            )
+        }
+    });
 }
 
 function mkRcrg(entry_line) {
@@ -1562,12 +1589,9 @@ function mkRcrg(entry_line) {
 let journalClickHandler = function(e) {
     let entry_container = e.target.parentElement.parentElement;
     if (e.target.classList.contains('edit_entry')) {
-        if (!isSignedIn()) { // doing this here because editEntry is used to make newly populated entries editable, as they populate locked by default.
-            flash('Must be signed in.');
-            return;
-        } else {
+        isSignedIn(() => { // checking here because we use the function when populating
             editEntry(entry_container);
-        }
+        })
     } else if (e.target.classList.contains('cancel_entry')) {
         cancelEditEntry(entry_container);
     } else if (e.target.classList.contains('save_entry')) {
@@ -1913,11 +1937,13 @@ function getRcrgLine(e) {
     let on_text_2 = mkc('rcrg_on_text_2', 'span');
     if (e.hasOwnProperty('qty')) {
         const last = e.qty.toString().substring(e.qty.toString().length - 1);
-        if (last == '1') {
+        let penult = e.qty.toString().length > 1 ? e.qty.toString().substring(e.qty.toString().length - 2, e.qty.toString().length - 1) : '';
+        if (e.qty.toString().length > 1)
+        if (last == '1' && penult != '1') {
             on_text_2.textContent = 'st day of every';
-        } else if (last == '2') {
+        } else if (last == '2' && penult != '1') {
             on_text_2.textContent = 'nd day of every';
-        } else if (last == '3') {
+        } else if (last == '3' && penult != '1') {
             on_text_2.textContent = 'rd day of every';
         } else {
             on_text_2.textContent = 'th day of every';
@@ -2152,12 +2178,13 @@ function rcrgTypeChanged(entry_container) {
         els.onlbl1.style.display = 'inline';
         els.onlbl2.style.display = 'inline';
         let last = els.qty.value ? els.qty.value.toString().substring(els.qty.value.toString().length - 1) : '';
+        let penult = els.qty.value.toString().length > 1 ? els.qty.value.toString().substring(els.qty.value.toString().length - 2, els.qty.value.toString().length - 1) : '';
         if (last) {
-            if (last == '1') {
+            if (last == '1' && penult != '1') {
                 els.onlbl2.textContent = 'st day of every';
-            } else if (last == '2') {
+            } else if (last == '2' && penult != '1') {
                 els.onlbl2.textContent = 'nd day of every';
-            } else if (last == '3') {
+            } else if (last == '3' && penult != '1') {
                 els.onlbl2.textContent = 'rd day of every';
             } else {
                 els.onlbl2.textContent = 'th day of every';
@@ -2186,105 +2213,100 @@ function getNewRcrgIndex() {
 }
 
 function createRcrg(type) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let newIndex = getNewRcrgIndex();
-    let div = getRcrgLine({
-        type: type,
-        index: newIndex
+    isSignedIn(() => {
+        let newIndex = getNewRcrgIndex();
+        let div = getRcrgLine({
+            type: type,
+            index: newIndex
+        });
+        let els = getRcrgLineEls(div);
+        editRcrg(div);
+        els.cancel.classList.remove('cancel_rcrg');
+        els.cancel.classList.add('cancel_new_entry');
+        els.save.classList.remove('save_rcrg');
+        els.save.classList.add('submit_new_rcrg');
+        els.save.textContent = 'Submit new recurring entry'
+        els.edit.remove();
+        els.delete.remove();
+        els.inst.remove();
+        els.countdown.remove();
+        const target = document.getElementById('rcrg');
+        if (target.firstChild) {
+            target.firstChild.before(div);
+        } else {
+            target.append(div);
+        }
     });
-    let els = getRcrgLineEls(div);
-    editRcrg(div);
-    els.cancel.classList.remove('cancel_rcrg');
-    els.cancel.classList.add('cancel_new_entry');
-    els.save.classList.remove('save_rcrg');
-    els.save.classList.add('submit_new_rcrg');
-    els.save.textContent = 'Submit new recurring entry'
-    els.edit.remove();
-    els.delete.remove();
-    els.inst.remove();
-    els.countdown.remove();
-    const target = document.getElementById('rcrg');
-    if (target.firstChild) {
-        target.firstChild.before(div);
-    } else {
-        target.append(div);
-    };
 }
 
 function submitNewRcrg(entry_container) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else if (validateRcrgLine(entry_container, false)) {
-        let els = getRcrgLineEls(entry_container);
-        let index = els.entry_data.index;
-        let type = els.rcrtype.value;
-        let qty = els.qty.value;
-        let period = els.period.value;
-        let desc = els.desc.value + ' RCRG' + index;
-        
-        let entries = [];
-        for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-            let entry = [];
-            entry.push(type);
-            entry.push(qty);
-            entry.push(period);
-            entry.push(desc);
-            if (i < els.deb_accts.length) {
-                entry.push(els.deb_accts[i].value);
-                entry.push(els.deb_amts[i].value ? els.deb_amts[i].value : 'Y');
-                entry.push('');
-            } else {
-                let j = i - els.deb_accts.length;
-                entry.push(els.cred_accts[j].value);
-                entry.push('');
-                entry.push(els.cred_amts[j].value ? els.cred_amts[j].value : 'Y');
+    isSignedIn(() => {
+        if (validateRcrgLine(entry_container, false)) {
+            let els = getRcrgLineEls(entry_container);
+            let index = els.entry_data.index;
+            let type = els.rcrtype.value;
+            let qty = els.qty.value;
+            let period = els.period.value;
+            let desc = els.desc.value + ' RCRG' + index;
+            
+            let entries = [];
+            for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+                let entry = [];
+                entry.push(type);
+                entry.push(qty);
+                entry.push(period);
+                entry.push(desc);
+                if (i < els.deb_accts.length) {
+                    entry.push(els.deb_accts[i].value);
+                    entry.push(els.deb_amts[i].value ? els.deb_amts[i].value : 'Y');
+                    entry.push('');
+                } else {
+                    let j = i - els.deb_accts.length;
+                    entry.push(els.cred_accts[j].value);
+                    entry.push('');
+                    entry.push(els.cred_amts[j].value ? els.cred_amts[j].value : 'Y');
+                }
+                entries.push(entry);
             }
-            entries.push(entry);
+            appendValues(ssid, 'Recurring Entries!A1', 'RAW', entries, async function() {
+                await bha_sync();
+                flash('Recurring template saved');
+                entry_container.remove()
+                populateRcrg();
+            });
         }
-        appendValues(ssid, 'Recurring Entries!A1', 'RAW', entries, async function() {
-            await bha_sync();
-            flash('Recurring template saved');
-            entry_container.remove()
-            populateRcrg();
-        });
-    }
+    })
 }
 
 function editRcrg(entry_line) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.')
-        return;
-    }
-    let els = getRcrgLineEls(entry_line);
-    els.rcrtype.disabled = false;
-    els.qty.disabled = false;
-    els.period.disabled = false;
-    els.desc.disabled = false;
-    els.exp.disabled = false;
-    els.inc.disabled = false;
-    els.tfr.disabled = false;
-    els.gen.disabled = false;
-    els.split.disabled = false;
-    els.add_deb.disabled = false;
-    els.add_cred.disabled = false;
-    els.edit.style.display = 'none';
-    els.save.style.display = 'inline';
-    els.cancel.style.display = 'inline';
-    els.delete.style.display = 'inline';
-    for (let i = 0; i < els.deb_accts.length; i++) {
-        els.deb_accts[i].disabled = false;
-        els.rem_deb_acct_btns[i].disabled = false;
-        els.deb_amts[i].disabled = false;
-    }
-    for (let i = 0; i < els.cred_accts.length; i++) {
-        els.cred_accts[i].disabled = false;
-        els.rem_cred_acct_btns[i].disabled = false;
-        els.cred_amts[i].disabled = false;
-    }
+    isSignedIn(() => {
+        let els = getRcrgLineEls(entry_line);
+        els.rcrtype.disabled = false;
+        els.qty.disabled = false;
+        els.period.disabled = false;
+        els.desc.disabled = false;
+        els.exp.disabled = false;
+        els.inc.disabled = false;
+        els.tfr.disabled = false;
+        els.gen.disabled = false;
+        els.split.disabled = false;
+        els.add_deb.disabled = false;
+        els.add_cred.disabled = false;
+        els.edit.style.display = 'none';
+        els.save.style.display = 'inline';
+        els.cancel.style.display = 'inline';
+        els.delete.style.display = 'inline';
+        for (let i = 0; i < els.deb_accts.length; i++) {
+            els.deb_accts[i].disabled = false;
+            els.rem_deb_acct_btns[i].disabled = false;
+            els.deb_amts[i].disabled = false;
+        }
+        for (let i = 0; i < els.cred_accts.length; i++) {
+            els.cred_accts[i].disabled = false;
+            els.rem_cred_acct_btns[i].disabled = false;
+            els.cred_amts[i].disabled = false;
+        }
+    })
 }
 
 function cancelRcrg(entry_line) {
@@ -2317,60 +2339,55 @@ function cancelRcrg(entry_line) {
 }
 
 async function saveRcrg(entry_line) { 
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else if (validateRcrgLine(entry_line)) {
-        let els = getRcrgLineEls(entry_line);
-        let entries = [];
-        let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
-        for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-            let entry = [
-                els.rcrtype.value,
-                els.qty.value,
-                els.period.value,
-                els.desc.value + 'RCRG' + els.entry_data.index
-            ];
-            if (i < els.deb_accts.length) {
-                entry.push(els.deb_accts[i].value);
-                entry.push(els.deb_amts[i].value);
-                entry.push('');
-            } else {
-                let j = i - els.deb_accts.length;
-                entry.push(els.cred_accts[j].value);
-                entry.push('');
-                entry.push(els.cred_amts[j].value);
+    isSignedIn(async () => {
+        if (validateRcrgLine(entry_line)) {
+            let els = getRcrgLineEls(entry_line);
+            let entries = [];
+            let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
+            for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+                let entry = [
+                    els.rcrtype.value,
+                    els.qty.value,
+                    els.period.value,
+                    els.desc.value + 'RCRG' + els.entry_data.index
+                ];
+                if (i < els.deb_accts.length) {
+                    entry.push(els.deb_accts[i].value);
+                    entry.push(els.deb_amts[i].value);
+                    entry.push('');
+                } else {
+                    let j = i - els.deb_accts.length;
+                    entry.push(els.cred_accts[j].value);
+                    entry.push('');
+                    entry.push(els.cred_amts[j].value);
+                }
+                entries.push(entry);
             }
-            entries.push(entry);
-        }
-        if (entries.length > origNumberRows) {
-            let rowsToAdd = entries.length - origNumberRows;
-            let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
-            let endIndex = startIndex + rowsToAdd;
-            await insertRows('Recurring Entries', startIndex, endIndex)
-        } else if (entries.length < origNumberRows) {
-            let rowsToDelete = origNumberRows - entries.length;
-            await deleteRows('Recurring Entries', els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete, els.entry_data.starting_sheet_row_index + origNumberRows);
-        }
-        batchUpdateValues(
-            [`Recurring Entries!A${els.entry_data.starting_sheet_row_index}`],
-            [entries],
-            async function() {
-                await bha_sync();
-                flash('Recurring entry template saved');
-                entry_line.remove();
-                populateRcrg();
+            if (entries.length > origNumberRows) {
+                let rowsToAdd = entries.length - origNumberRows;
+                let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
+                let endIndex = startIndex + rowsToAdd;
+                await insertRows('Recurring Entries', startIndex, endIndex);
+            } else if (entries.length < origNumberRows) {
+                let rowsToDelete = origNumberRows - entries.length;
+                await deleteRows('Recurring Entries', els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete, els.entry_data.starting_sheet_row_index + origNumberRows);
             }
-        )
-
-    }
+            batchUpdateValues(
+                [`Recurring Entries!A${els.entry_data.starting_sheet_row_index}`],
+                [entries],
+                async function() {
+                    await bha_sync();
+                    flash('Recurring entry template saved');
+                    entry_line.remove();
+                    populateRcrg();
+                }
+            )
+        }
+    })
 }
 
 function deleteRcrg(entry_line) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else {
+    isSignedIn(() => {
         let confirmMsg = 'Are you sure?';
 
         let origEntry = JSON.parse(entry_line.dataset.origentry);
@@ -2406,7 +2423,7 @@ function deleteRcrg(entry_line) {
             }
             deleteRows('Recurring Entries', startIndex, endIndex, removeRcrgIndexFlags);
         }
-    }
+    })
 }
 
 function instRcrgEntry(entry_line) {
@@ -2563,7 +2580,7 @@ function getEditAcctLine(acct) {
     name.value = acct.name;
     name.name = "edit_acct_name";
     name.size = acct.name.length > 20 ? acct.name.length : 20;
-    name.maxLength = '28';
+    name.maxLength = '30';
     name.disabled = true;
     name.required = true;
     name_and_buttons.append(arrow, name);
@@ -2897,27 +2914,25 @@ function editAcctToggleSubs(edit_acct_line) {
 }
 
 function editAcctEditLine(edit_acct_line) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let els = getEditAcctLineEls(edit_acct_line);
-    els.name.disabled = false;
-    els.edit_btn.style.display = 'none';
-    els.cancel_btn.style.display = 'inline';
-    els.save_btn.style.display = 'inline';
-    els.del_btn.style.display = 'inline';
-    els.mvup_btn.style.display = 'inline';
-    els.mvdn_btn.style.display = 'inline';
-    els.opts.style.display = 'flex';
-    if (!els.hasSubs) {
-        els.type.disabled = false;
-    }
-    els.parent.disabled = false;
-    els.pmt.disabled = false;
-    els.budget_chk.disabled = false;
-    els.budget_amt.disabled = false;
-    els.budget_exp.disabled = false;
+    isSignedIn(() => {
+        let els = getEditAcctLineEls(edit_acct_line);
+        els.name.disabled = false;
+        els.edit_btn.style.display = 'none';
+        els.cancel_btn.style.display = 'inline';
+        els.save_btn.style.display = 'inline';
+        els.del_btn.style.display = 'inline';
+        els.mvup_btn.style.display = 'inline';
+        els.mvdn_btn.style.display = 'inline';
+        els.opts.style.display = 'flex';
+        if (!els.hasSubs) {
+            els.type.disabled = false;
+        }
+        els.parent.disabled = false;
+        els.pmt.disabled = false;
+        els.budget_chk.disabled = false;
+        els.budget_amt.disabled = false;
+        els.budget_exp.disabled = false;
+    })
 }
 
 function editAcctCancelEdit(edit_acct_line) {
@@ -2939,11 +2954,8 @@ function editAcctCancelEdit(edit_acct_line) {
 }
 
 async function editAcctSaveAcct(edit_acct_line) {
-    if (!isSignedIn()) {
-        flash('must be signed in.');
-        return;
-    }
-    let els = getEditAcctLineEls(edit_acct_line);
+    isSignedIn(async () => {
+        let els = getEditAcctLineEls(edit_acct_line);
     let values = {
         name: els.name.value ? els.name.value : '',
         typecodes: '',
@@ -3109,6 +3121,7 @@ async function editAcctSaveAcct(edit_acct_line) {
             batchUpdateValues(ssranges, ssvalues, valuesUpdated);
         }
     }
+    })    
 }
 function getNewAcctLine() {
     let div = getEditAcctLine({name:'',typecodes:'',parent:'',budget:'',subs:[]});
@@ -3125,16 +3138,14 @@ function getNewAcctLine() {
     return div;
 }
 function editAcctCreateNewAcct() {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let div = getNewAcctLine();
-    if (document.getElementById('edit_accts').firstChild) {
-        document.getElementById('edit_accts').firstChild.before(div);
-    } else {
-        document.getElementById('edit_accts').append(div);
-    };
+    isSignedIn(() => {
+        let div = getNewAcctLine();
+        if (document.getElementById('edit_accts').firstChild) {
+            document.getElementById('edit_accts').firstChild.before(div);
+        } else {
+            document.getElementById('edit_accts').append(div);
+        }
+    })
 }
 
 async function editAcctSaveNewAcct (edit_acct_line) {
@@ -3354,25 +3365,23 @@ async function editAcctMvLineDown(edit_acct_line) {
 }
 
 function editAcctDeleteAcct(edit_acct_line) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let els = getEditAcctLineEls(edit_acct_line);
-    let name = els.name.value ? els.name.value : '';
-    let index;
-    for (let i = 0; i < accts.length; i++) {
-        if (accts[i][0] == name) {
-            index = i + 1;
+    isSignedIn(() => {
+        let els = getEditAcctLineEls(edit_acct_line);
+        let name = els.name.value ? els.name.value : '';
+        let index;
+        for (let i = 0; i < accts.length; i++) {
+            if (accts[i][0] == name) {
+                index = i + 1;
+            }
         }
-    }
-    if (index) {
-        deleteRows('Account List', index, index + 1, async function() {
-            await bha_sync();
-            flash(`Account ${name} deleted.`);
-            populateEditAccts();                    
-        })
-    }
+        if (index) {
+            deleteRows('Account List', index, index + 1, async function() {
+                await bha_sync();
+                flash(`Account ${name} deleted.`);
+                populateEditAccts();                    
+            })
+        }
+    })
 }
 
 let editAcctClickHandler = function(e) {
@@ -4018,112 +4027,108 @@ function popEomDisplay(ledger) {
 }
 
 async function submitEom() {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    }
-    let m = eom_ledger.m;
-    let y = eom_ledger.y;
-    const last_date_of_rev_month = new Date(y, m, 0);
-    const ld = last_date_of_rev_month.getDate();
-    const first_date_of_next_month = new Date(y, m, 1);
-    const ny = first_date_of_next_month.getFullYear();
-    const nm = first_date_of_next_month.getMonth() + 1;
-
-    let closing_entries = [];
-    let opening_entries = [];
-    for (const name in eom_ledger.accts) {
-        let a = eom_ledger.accts[name];
-        if (a.closed) {
-            continue;
+    isSignedIn(async () => {
+        let m = eom_ledger.m;
+        let y = eom_ledger.y;
+        const last_date_of_rev_month = new Date(y, m, 0);
+        const ld = last_date_of_rev_month.getDate();
+        const first_date_of_next_month = new Date(y, m, 1);
+        const ny = first_date_of_next_month.getFullYear();
+        const nm = first_date_of_next_month.getMonth() + 1;
+    
+        let closing_entries = [];
+        let opening_entries = [];
+        for (const name in eom_ledger.accts) {
+            let a = eom_ledger.accts[name];
+            if (a.closed) {
+                continue;
+            }
+            let closing_debit, closing_credit;
+            const debit = a.debit;
+            const credit = a.credit;
+            if (debit > credit) {
+                closing_credit = debit - credit;
+            } else if (credit > debit) {
+                closing_debit = credit - debit;
+            }
+            if (debit != credit) {
+                closing_entries.push(
+                    [y, m, ld, `CLOSING ENTRY ${name} to Income Summary`, name, closing_debit, closing_credit],
+                    [y, m, ld, `CLOSING ENTRY ${name} to Income Summary`, 'Income Summary', closing_credit, closing_debit]    
+                )
+            }
+    
+            const opening_budget = a.budgeted_amt;
+            if (opening_budget > 0) {
+                if (a.types.includes('R')) { // income account: budget is debited
+                    opening_entries.push(
+                        [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, name, opening_budget, ''],
+                        [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, 'Budget', '', opening_budget]
+                    )
+                } else if (a.types.includes('E')) { // expense account: budget is credited
+                    opening_entries.push(
+                        [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, name, '', opening_budget],
+                        [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, 'Budget', opening_budget, '']
+                    )
+                }
+            }
+    
+            // Opening Entry Retained Earnings > acct
+            if (a.types.includes('E')) {
+                const opening_rollover = a.rollover_amt;
+                if (opening_rollover > 0) { // expense account: rollover is credited
+                    opening_entries.push(
+                        [ny, nm, 1, `OPENING ENTRY Retained Earnings to ${name}`, name, '', opening_rollover],
+                        [ny, nm, 1, `OPENING ENTRY Retained Earnings to ${name}`, 'Retained Earnings', opening_rollover, '']
+                    )
+                }
+            }
         }
-        let closing_debit, closing_credit;
-        const debit = a.debit;
-        const credit = a.credit;
-        if (debit > credit) {
-            closing_credit = debit - credit;
-        } else if (credit > debit) {
-            closing_debit = credit - debit;
+    
+        // generate closing entry Income Summary > Retained Earnings
+        let income_summary = 0;
+        for (const e of closing_entries) {
+            if (e[4] == 'Income Summary') {
+                if (e[5]) {
+                    income_summary -= parseFloat(e[5])
+                } else if (e[6]) {
+                    income_summary += parseFloat(e[6])
+                }
+            }
         }
-        if (debit != credit) {
+        if (income_summary > 0) { // income_summary is credit
             closing_entries.push(
-                [y, m, ld, `CLOSING ENTRY ${name} to Income Summary`, name, closing_debit, closing_credit],
-                [y, m, ld, `CLOSING ENTRY ${name} to Income Summary`, 'Income Summary', closing_credit, closing_debit]    
+                [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Income Summary', income_summary.toFixed(2), ''],
+                [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Retained Earnings', '', income_summary.toFixed(2)]
+            )
+        } else if (income_summary < 0) { // income summary is debit
+            income_summary = income_summary * -1;
+            closing_entries.push(
+                [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Income Summary', '', income_summary.toFixed(2)],
+                [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Retained Earnings', income_summary.toFixed(2), '']
             )
         }
-
-        const opening_budget = a.budgeted_amt;
-        if (opening_budget > 0) {
-            if (a.types.includes('R')) { // income account: budget is debited
-                opening_entries.push(
-                    [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, name, opening_budget, ''],
-                    [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, 'Budget', '', opening_budget]
-                )
-            } else if (a.types.includes('E')) { // expense account: budget is credited
-                opening_entries.push(
-                    [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, name, '', opening_budget],
-                    [ny, nm, 1, `OPENING ENTRY Budget to ${name}`, 'Budget', opening_budget, '']
-                )
+    
+        try {
+            // append closing entries to journal
+            if (closing_entries.length > 0) {
+                appendValues(ssid, "Journal!A1", 'RAW', closing_entries);
             }
-        }
-
-        // Opening Entry Retained Earnings > acct
-        if (a.types.includes('E')) {
-            const opening_rollover = a.rollover_amt;
-            if (opening_rollover > 0) { // expense account: rollover is credited
-                opening_entries.push(
-                    [ny, nm, 1, `OPENING ENTRY Retained Earnings to ${name}`, name, '', opening_rollover],
-                    [ny, nm, 1, `OPENING ENTRY Retained Earnings to ${name}`, 'Retained Earnings', opening_rollover, '']
-                )
+            // append opening entries to journal
+            if (opening_entries.length > 0) {
+                appendValues(ssid, "Journal!A1", 'RAW', opening_entries);
             }
-        }
-    }
-
-    // generate closing entry Income Summary > Retained Earnings
-    let income_summary = 0;
-    for (const e of closing_entries) {
-        if (e[4] == 'Income Summary') {
-            if (e[5]) {
-                income_summary -= parseFloat(e[5])
-            } else if (e[6]) {
-                income_summary += parseFloat(e[6])
+            // update display to closed
+            if (closing_entries.length > 0) {
+                flash(`${closing_entries.length / 2 - 1} account(s) closed for ${months[m - 1]} ${y}${opening_entries.length > 0 ? `; budget opened for ${opening_entries.length / 2} accounts for ${nxt_month} ${ny}` : ''}`);
             }
-        }
-    }
-    if (income_summary > 0) { // income_summary is credit
-        closing_entries.push(
-            [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Income Summary', income_summary.toFixed(2), ''],
-            [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Retained Earnings', '', income_summary.toFixed(2)]
-        )
-    } else if (income_summary < 0) { // income summary is debit
-        income_summary = income_summary * -1;
-        closing_entries.push(
-            [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Income Summary', '', income_summary.toFixed(2)],
-            [y, m, ld, 'CLOSING ENTRY Income Summary to Retained Earnings', 'Retained Earnings', income_summary.toFixed(2), '']
-        )
-    }
-
-    try {
-        // append closing entries to journal
-        if (closing_entries.length > 0) {
-            appendValues(ssid, "Journal!A1", 'RAW', closing_entries);
-        }
-        // append opening entries to journal
-        if (opening_entries.length > 0) {
-            appendValues(ssid, "Journal!A1", 'RAW', opening_entries);
-        }
-        // update display to closed
-        if (closing_entries.length > 0) {
-            flash(`${closing_entries.length / 2 - 1} account(s) closed for ${months[m - 1]} ${y}${opening_entries.length > 0 ? `; budget opened for ${opening_entries.length / 2} accounts for ${nxt_month} ${ny}` : ''}`);
-        }
-        bha_sync();
-        eom_ledger = getEomLedger(m, y);
-        popEomDisplay(eom_ledger);
-    } catch(err) {
-        flash('Error: ' + err.message);
-    }
-
-
+            bha_sync();
+            eom_ledger = getEomLedger(m, y);
+            popEomDisplay(eom_ledger);
+        } catch(err) {
+            flash('Error: ' + err.message);
+        }    
+    })
 }
 
 function adjNMBud(ledger_line) {
@@ -4211,10 +4216,7 @@ let eomChangeHandler = function(e) {
 
 // BEGIN MODULE general setup
 async function saveSsid() {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else { // don't delete prevSSIDs
+    isSignedIn(async () => { // don't delete prevSSIDs
         localStorage.removeItem('spreadsheetID');
         localStorage.removeItem('spreadsheet_properties');
         localStorage.removeItem('last_sync');
@@ -4240,176 +4242,168 @@ async function saveSsid() {
             console.log(err);
             return;
         }
-    }
+    })
 }
 
 async function createSpreadsheet() {
-    if (!isSignedIn()) {
-        flash('Must be signed in');
-        return;
-    }
-    if (ssprops && !confirm('Are you sure?')) {
-        return;
-    }
-    let template = document.getElementById('new_ss_templates').value;
-    let templateValues;
-    if (!template) {
-        templateValues = [
-            ['Name','Account type(s)','Parent','Monthly Budget'], 
-            ['Assets', 'A'],
-            ['Liabilities', 'L'],
-            ['Equity', 'Q'],
-            ['Expenses', 'E'],
-            ['Revenue', 'R']
-        ];
-    } else if (template == 'home') {
-        templateValues = [
-            ['Name','Account type(s)','Parent','Monthly Budget'], 
-            ['Assets', 'A'],
-            ['Cash accounts', 'A', 'Assets'],
-            ['Cash on hand', 'AP', 'Cash accounts'],
-            ['Checking account', 'AP', 'Cash accounts'],
-            ['Venmo account', 'AP', 'Cash accounts'],
-            ['Savings account', 'A', 'Cash accounts'],
-            ['Liabilities', 'L'],
-            ['Credit card', 'LP', 'Liabilities'],
-            ['Vehicle loan', 'L', 'Liabilities'],
-            ['Equity', 'Q'],
-            ['Retained Earnings', 'Q', 'Equity'],
-            ['Income Summary', 'Q', 'Equity'],
-            ['Budget', 'Q', 'Equity'],
-            ['Expenses', 'E'],
-            ['Home & personal', 'EBD', 'Expenses'],
-            ['Clothing', 'EBD', 'Home & personal'],
-            ['Medical care', 'EBD', 'Home & personal'],
-            ['Health & Beauty', 'EBD', 'Home & personal'],
-            ['Food', 'EBD', 'Expenses'],
-            ['Groceries', 'EBD', 'Food'],
-            ['Eating out', 'EBD', 'Food'],
-            ['Giving', 'E', 'Expenses'],
-            ['Christmas gifts', 'EBD', 'Giving'],
-            ['Vehicle', 'E', 'Expenses'],
-            ['Gas', 'EBD', 'Vehicle'],
-            ['Car insurance', 'EBS', 'Vehicle'],
-            ['Car maintenance', 'EBS', 'Vehicle'],
-            ['Car loan interest', 'E', 'Vehicle'],
-            ['Utilities', 'E', 'Expenses'],
-            ['Rent', 'EBS', 'Utilities'],
-            ['Cell phone', 'EBS', 'Utilities'],
-            ['Electric', 'EBD', 'Utilities'],
-            ['Water', 'EBD', 'Utilities'],
-            ['Internet & TV', 'EBS', 'Utilities'],
-            ['Trash', 'EBS', 'Utilities'],
-            ['Gas (house)', 'EBS', 'Utilities'],
-            ['Insurance', 'E', 'Expenses'],
-            ['Health insurance', 'EBS', 'Insurance'],
-            ['Home/renter\'s insurance', 'EBS', 'Insurance'],
-            ['Fun', 'E', 'Expenses'],
-            ['Entertainment', 'EBD', 'Fun'],
-            ['Hobbies', 'EBD', 'Fun'],
-            ['Vacation', 'EBD', 'Fun'],
-            ['Revenue', 'R'],
-            ['Employment income', 'RB', 'Revenue'],
-            ['Other income', 'RB', 'Revenue'],
-            ['Gifts from others', 'R', 'Revenue'],
-        ];
-    } else if (template == 'estate') {
-        templateValues = [
-            ['Name','Account type(s)','Parent','Monthly Budget'], 
-            ['Assets', 'A'],
-            ['Cash accounts', 'A', 'Assets'],
-            ['Cash on hand', 'AP', 'Cash accounts'],
-            ['Checking account', 'AP', 'Cash accounts'],
-            ['Stocks and Bonds', 'A', 'Assets'],
-            ['Mortgages and Notes', 'A', 'Assets'],
-            ['Real Estate', 'A', 'Assets'],
-            ['Miscellaneous assets', 'A', 'Assets'],
-            ['Firearms', 'A', 'Assets'],
-            ['Liabilities', 'L'],
-            ['Equity', 'Q'],
-            ['Distributions to beneficiaries', 'Q', 'Equity'],
-            ['Expenses', 'E'],
-            ['Interest expense', 'E', 'Expenses'],
-            ['Taxes', 'E', 'Expenses'],
-            ['Fiduciary fees', 'E', 'Expenses'],
-            ['Attorney, accountant, tax prep. fees', 'E', 'Expenses'],
-            ['Revenue', 'R'],
-            ['Receipts', 'R', 'Revenue'],
-            ['Insurance payable to Estate', 'R', 'Revenue'],
-            ['IRAs, 401Ks payable to Estate', 'R', 'Revenue'],
-            ['Interest income', 'R', 'Revenue'],
-            ['Dividends', 'R', 'Revenue'],
-            ['Capital gain', 'R', 'Revenue']
-        ];
-    }
-
-    let creation_response, result;
-    try {
-        creation_response = await gapi.client.sheets.spreadsheets.create({
-            properties: {
-                title: 'Untitled journal: Baker home accounting'
-            },
-            sheets: [{
+    isSignedIn(async () => {
+        let template = document.getElementById('new_ss_templates').value;
+        let templateValues;
+        if (!template) {
+            templateValues = [
+                ['Name','Account type(s)','Parent','Monthly Budget'], 
+                ['Assets', 'A'],
+                ['Liabilities', 'L'],
+                ['Equity', 'Q'],
+                ['Expenses', 'E'],
+                ['Revenue', 'R']
+            ];
+        } else if (template == 'home') {
+            templateValues = [
+                ['Name','Account type(s)','Parent','Monthly Budget'], 
+                ['Assets', 'A'],
+                ['Cash accounts', 'A', 'Assets'],
+                ['Cash on hand', 'AP', 'Cash accounts'],
+                ['Checking account', 'AP', 'Cash accounts'],
+                ['Venmo account', 'AP', 'Cash accounts'],
+                ['Savings account', 'A', 'Cash accounts'],
+                ['Liabilities', 'L'],
+                ['Credit card', 'LP', 'Liabilities'],
+                ['Vehicle loan', 'L', 'Liabilities'],
+                ['Equity', 'Q'],
+                ['Retained Earnings', 'Q', 'Equity'],
+                ['Income Summary', 'Q', 'Equity'],
+                ['Budget', 'Q', 'Equity'],
+                ['Expenses', 'E'],
+                ['Home & personal', 'EBD', 'Expenses'],
+                ['Clothing', 'EBD', 'Home & personal'],
+                ['Medical care', 'EBD', 'Home & personal'],
+                ['Health & Beauty', 'EBD', 'Home & personal'],
+                ['Food', 'EBD', 'Expenses'],
+                ['Groceries', 'EBD', 'Food'],
+                ['Eating out', 'EBD', 'Food'],
+                ['Giving', 'E', 'Expenses'],
+                ['Christmas gifts', 'EBD', 'Giving'],
+                ['Vehicle', 'E', 'Expenses'],
+                ['Gas', 'EBD', 'Vehicle'],
+                ['Car insurance', 'EBS', 'Vehicle'],
+                ['Car maintenance', 'EBS', 'Vehicle'],
+                ['Car loan interest', 'E', 'Vehicle'],
+                ['Utilities', 'E', 'Expenses'],
+                ['Rent', 'EBS', 'Utilities'],
+                ['Cell phone', 'EBS', 'Utilities'],
+                ['Electric', 'EBD', 'Utilities'],
+                ['Water', 'EBD', 'Utilities'],
+                ['Internet & TV', 'EBS', 'Utilities'],
+                ['Trash', 'EBS', 'Utilities'],
+                ['Gas (house)', 'EBS', 'Utilities'],
+                ['Insurance', 'E', 'Expenses'],
+                ['Health insurance', 'EBS', 'Insurance'],
+                ['Home/renter\'s insurance', 'EBS', 'Insurance'],
+                ['Fun', 'E', 'Expenses'],
+                ['Entertainment', 'EBD', 'Fun'],
+                ['Hobbies', 'EBD', 'Fun'],
+                ['Vacation', 'EBD', 'Fun'],
+                ['Revenue', 'R'],
+                ['Employment income', 'RB', 'Revenue'],
+                ['Other income', 'RB', 'Revenue'],
+                ['Gifts from others', 'R', 'Revenue'],
+            ];
+        } else if (template == 'estate') {
+            templateValues = [
+                ['Name','Account type(s)','Parent','Monthly Budget'], 
+                ['Assets', 'A'],
+                ['Cash accounts', 'A', 'Assets'],
+                ['Cash on hand', 'AP', 'Cash accounts'],
+                ['Checking account', 'AP', 'Cash accounts'],
+                ['Stocks and Bonds', 'A', 'Assets'],
+                ['Mortgages and Notes', 'A', 'Assets'],
+                ['Real Estate', 'A', 'Assets'],
+                ['Miscellaneous assets', 'A', 'Assets'],
+                ['Firearms', 'A', 'Assets'],
+                ['Liabilities', 'L'],
+                ['Equity', 'Q'],
+                ['Distributions to beneficiaries', 'Q', 'Equity'],
+                ['Expenses', 'E'],
+                ['Interest expense', 'E', 'Expenses'],
+                ['Taxes', 'E', 'Expenses'],
+                ['Fiduciary fees', 'E', 'Expenses'],
+                ['Attorney, accountant, tax prep. fees', 'E', 'Expenses'],
+                ['Revenue', 'R'],
+                ['Receipts', 'R', 'Revenue'],
+                ['Insurance payable to Estate', 'R', 'Revenue'],
+                ['IRAs, 401Ks payable to Estate', 'R', 'Revenue'],
+                ['Interest income', 'R', 'Revenue'],
+                ['Dividends', 'R', 'Revenue'],
+                ['Capital gain', 'R', 'Revenue']
+            ];
+        }
+    
+        let creation_response, result;
+        try {
+            creation_response = await gapi.client.sheets.spreadsheets.create({
                 properties: {
-                    title: 'Journal'
-                }}, {
-                properties: {
-                    title: 'Account List'
-                }}, {
-                properties: {
-                    title: 'Recurring Entries'
-                }}]
-        })
-    } catch(err) {
-        flash(err.message);
-    }
-    result = creation_response.result;
-
-    localStorage.removeItem('spreadsheetID');
-    localStorage.removeItem('spreadsheet_properties');
-    localStorage.removeItem('last_sync');
-    localStorage.removeItem('journal');
-    localStorage.removeItem('account_list');
-    localStorage.removeItem('rcrgs');
-    localStorage.removeItem('lastPageViewed');
-    localStorage.removeItem('entryQueue');
-    ssid = result.spreadsheetId;
-    localStorage.setItem('spreadsheetID', ssid);
-
-    try {
-        response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId: ssid,
-            resource: {
-                // this value for data is where we will put the different templates
-                data: [{
-                    range: 'Journal!A1',
-                    values: [['Date','Description','Account','Debit','Credit']]
-                },{
-                    range:'Account List!A1',
-                    values: templateValues
-                },{
-                    range:'Recurring Entries!A1',
-                    values: [['on / every', 'interval (#)', 'period', 'Description', 'Account', 'Debit', 'Credit']]
-                }],
-                valueInputOption: 'RAW'
-            },
-        });
-    } catch (err) {
-        flash(err.message);
-    }
-
-    await bha_sync();
-    flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
-    updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
-    goToPage('add_entry');
+                    title: 'Untitled journal: Baker home accounting'
+                },
+                sheets: [{
+                    properties: {
+                        title: 'Journal'
+                    }}, {
+                    properties: {
+                        title: 'Account List'
+                    }}, {
+                    properties: {
+                        title: 'Recurring Entries'
+                    }}]
+            })
+        } catch(err) {
+            flash(err.message);
+        }
+        result = creation_response.result;
+    
+        localStorage.removeItem('spreadsheetID');
+        localStorage.removeItem('spreadsheet_properties');
+        localStorage.removeItem('last_sync');
+        localStorage.removeItem('journal');
+        localStorage.removeItem('account_list');
+        localStorage.removeItem('rcrgs');
+        localStorage.removeItem('lastPageViewed');
+        localStorage.removeItem('entryQueue');
+        ssid = result.spreadsheetId;
+        localStorage.setItem('spreadsheetID', ssid);
+    
+        try {
+            response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: ssid,
+                resource: {
+                    // this value for data is where we will put the different templates
+                    data: [{
+                        range: 'Journal!A1',
+                        values: [['Date','Description','Account','Debit','Credit']]
+                    },{
+                        range:'Account List!A1',
+                        values: templateValues
+                    },{
+                        range:'Recurring Entries!A1',
+                        values: [['on / every', 'interval (#)', 'period', 'Description', 'Account', 'Debit', 'Credit']]
+                    }],
+                    valueInputOption: 'RAW'
+                },
+            });
+        } catch (err) {
+            flash(err.message);
+        }
+    
+        await bha_sync();
+        flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
+        updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
+        goToPage('add_entry');
+    })
 }
 async function saveJournalName(name) {
-    if (!isSignedIn()) {
-        flash('Must be signed in.');
-        return;
-    } else {
-        let response;
+    isSignedIn(async () => {
         try {
+            let response;
             response = await gapi.client.sheets.spreadsheets.batchUpdate({
                 spreadsheetId: ssid,
                 requests: [{
@@ -4435,7 +4429,7 @@ async function saveJournalName(name) {
                         fields: 'title'
                     }
                 }]
-            })
+            });
             document.getElementById('journal_name').disabled = true;
             document.getElementById('edit_journal_name').style.display = 'inline';
             document.getElementById('cancel_edit_journal_name').style.display = 'none';
@@ -4446,7 +4440,7 @@ async function saveJournalName(name) {
             return;
         }
 
-    }
+    })
 }
 
 function validateSSID(input) {
@@ -4460,15 +4454,12 @@ function validateSSID(input) {
 
 let setupClickHandler = function(e) {
     if (e.target.id == 'edit_journal_name') {
-        if (!isSignedIn()) {
-            flash('Must be signed in.');
-            return;
-        } else {
+        isSignedIn(() => {
             document.getElementById('journal_name').disabled = false;
             e.target.style.display = 'none';
             document.getElementById('cancel_edit_journal_name').style.display = 'inline';
             document.getElementById('save_journal_name').style.display = 'inline';
-        }
+        });
     }
     if (e.target.id == 'cancel_edit_journal_name') {
         document.getElementById('journal_name').disabled = true;
