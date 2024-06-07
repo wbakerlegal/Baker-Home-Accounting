@@ -120,6 +120,12 @@ function isSignedIn(callback) {
                 } else {
                     tokenClient.requestAccessToken();
                 }
+                tokenClient.callback = (resp) => {
+                    if (resp.error !== undefined) {
+                        throw(resp);
+                    }
+                    bha_signedin();
+                }
             } else {
                 return false;
             }

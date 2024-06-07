@@ -63,7 +63,7 @@ a:hover, .fakea:hover {
 }
 
 input, select {
-    padding: 0.75rem .5rem;
+    padding: 0.62rem;
     border-radius: .35rem;
     border: 0;
     background-color: #DAEDF7;
@@ -98,7 +98,7 @@ input:disabled, select:disabled {
 }
 #nav_menu {
     margin-right: 1rem;
-    padding: 0.5rem;
+    padding: 0.62rem;
     border-radius: .35rem;
     border: 0;
     background-color: #F5CD78;
@@ -265,7 +265,8 @@ input:disabled, select:disabled {
     flex: 0 1 38%;
 }
 .desc {
-    flex: 0 1 62%;
+    flex: 0 1 61%;
+    margin-right: 0.25rem;
 }
 .rcrg_template .desc {
     flex: 1 1 100%;
