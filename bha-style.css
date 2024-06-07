@@ -265,11 +265,12 @@ input:disabled, select:disabled {
     flex: 0 1 38%;
 }
 .desc {
-    flex: 0 1 61%;
+    flex: 0 1 60%;
     margin-right: 0.25rem;
 }
 .rcrg_template .desc {
     flex: 1 1 100%;
+    margin-right: 0;
 }
 .rcrg_details {
     flex: 0 1 auto;
@@ -290,7 +291,7 @@ input:disabled, select:disabled {
 }
 .deb_acct, .cred_acct {
     flex: 0 1 60%;
-    margin-right: .25rem;
+    margin-right: 0.25rem;
 }
 .type_container .add_deb_acct:hover:not(:disabled), .type_container  .add_cred_acct:hover:not(:disabled),  .type_container  .split_entry:hover:not(:disabled) {
     background-color: #F5A778;

@@ -15,6 +15,9 @@
 
 // To-do: 
 /*
+handleConnectClick to refresh the lastPageViewed to actually achieve 'sync'
+*/
+/*
 NEED TO RE-READ THE SPREADSHEET BEFORE EDITING OR DELETING A ROW ? 
 ---If collaborating, could cause serious data loss if one person adds or delete rows between when another person syncs the spreadsheet and edits or deletes something
 */
@@ -113,19 +116,15 @@ function isSignedIn(callback) {
                     }
                     bha_signedin();
                     callback();
+                    tokenClient.callback = (resp) => { // reset to just bha_signedin so we don't get a double edit or something weird if the requestaccesstoken function gets called without first redefining another callback.
+                        if (resp.error !== undefined) {
+                            throw(resp);
+                        }
+                        bha_signedin();
+                    }
                     return true;
                 }
-                if (gapi.client.getToken() === null) {
-                    tokenClient.requestAccessToken();
-                } else {
-                    tokenClient.requestAccessToken();
-                }
-                tokenClient.callback = (resp) => {
-                    if (resp.error !== undefined) {
-                        throw(resp);
-                    }
-                    bha_signedin();
-                }
+                tokenClient.requestAccessToken();
             } else {
                 return false;
             }
@@ -198,7 +197,7 @@ async function bha_sync() {
         document.getElementById('setup_previous_journals').style.display = 'block';
     }
 
-    // get the full list of accounts
+    // fetch the whole spreadsheet
     let response;
     try {
         response = await gapi.client.sheets.spreadsheets.values.batchGet({
@@ -1067,11 +1066,7 @@ function addToEntryQueue(entries) {
                 }
                 bha_signedin(); // upload entries happens here
             }
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken();
-            } else {
-                tokenClient.requestAccessToken();
-            }
+            tokenClient.requestAccessToken();
         }
     } else {
         flash('Entry stored. Sign in to sync.');
@@ -1234,7 +1229,7 @@ let addEntryFocusHandler = function(e) {
 
 // END  Add Journal Entry BEGIN Edit Journal Entry & recurring entries
 
-function processJournal(raw, startingSSRowIndex0) {
+function processJournal(raw, startingSSRowIndex1) {
     /* returns [{
         type: exp/inc/tfr,
         rcrgindex: int,
@@ -1302,7 +1297,7 @@ function processJournal(raw, startingSSRowIndex0) {
         debits: 0,
         credits: 0,
     };
-    if (parseInt(startingSSRowIndex0)) entry.starting_sheet_row_index = parseInt(startingSSRowIndex0);
+    if (parseInt(startingSSRowIndex1)) entry.starting_sheet_row_index = parseInt(startingSSRowIndex1);
 
     for (let i = 0; i < raw.length; i++) {
         let date = raw[i][0];
@@ -1321,7 +1316,7 @@ function processJournal(raw, startingSSRowIndex0) {
                 debits: 0,
                 credits: 0,
             };
-            if (parseInt(startingSSRowIndex0)) entry.starting_sheet_row_index = i + parseInt(startingSSRowIndex0);
+            if (parseInt(startingSSRowIndex1)) entry.starting_sheet_row_index = i + parseInt(startingSSRowIndex1);
         }
         entry.date = date;
         entry.desc = desc;
@@ -1350,7 +1345,7 @@ function processJournal(raw, startingSSRowIndex0) {
 
 function getJournalEntriesByDate(fromDate, toDate) {
     let fetched = [];
-    let fetchedStartingSSRow = 1;
+    let fetchedStartingSSRow = 2;
     let entryList = [];
     for (let i = 0; i < journal.length; i++) {
         let row = journal[i];
@@ -1360,7 +1355,7 @@ function getJournalEntriesByDate(fromDate, toDate) {
                 fetched.push(row);
         } else if (i < journal.length - 1) {
             if (fetched.length > 0) {
-                let entries = processJournal(fetched, fetchedStartingSSRow + 1);
+                let entries = processJournal(fetched, fetchedStartingSSRow);
                 for (const e of entries) entryList.push(e);
                 fetched = [];
             }
@@ -1368,7 +1363,7 @@ function getJournalEntriesByDate(fromDate, toDate) {
         }
         if (i == journal.length - 1) {
             if (fetched.length > 0) {
-                let entries = processJournal(fetched, fetchedStartingSSRow + 1);
+                let entries = processJournal(fetched, fetchedStartingSSRow);
                 for (const e of entries) entryList.push(e);
             }
         }
@@ -1601,7 +1596,7 @@ let journalClickHandler = function(e) {
 
 // END Journal BEGIN Recurring Entries
 
-function processRcrgs(raw, startingSSRowIndex0) {
+function processRcrgs(raw, startingSSRowIndex1) {
     /* raw = [
         ['on/every', '#qty', 'period', 'desc', 'acct', 'debit', 'credit']
     ]
@@ -1664,7 +1659,7 @@ function processRcrgs(raw, startingSSRowIndex0) {
         }
         returned.push(entry);
     }
-    ssIndex = parseInt(startingSSRowIndex0);
+    ssIndex = parseInt(startingSSRowIndex1);
     let returned = [];
     let entry = {
         deb_accts: [],
@@ -1793,7 +1788,7 @@ function populateRcrg() {
     while (document.getElementById('rcrg').firstChild) {
         document.getElementById('rcrg').firstChild.remove();
     }
-    let rcrgList = rcrgs.length > 0 ? processRcrgs(rcrgs, 1) : [];
+    let rcrgList = rcrgs.length > 0 ? processRcrgs(rcrgs, 2) : [];
 
     for (let i = 0; i < rcrgList.length; i++) {
         let indexOfSmallestValue = i;
@@ -1934,7 +1929,8 @@ function getRcrgLine(e) {
     if (e.hasOwnProperty('qty')) {
         const last = e.qty.toString().substring(e.qty.toString().length - 1);
         let penult = e.qty.toString().length > 1 ? e.qty.toString().substring(e.qty.toString().length - 2, e.qty.toString().length - 1) : '';
-        if (e.qty.toString().length > 1)
+        console.log(last == '1' || last == '3', penult != 1);
+
         if (last == '1' && penult != '1') {
             on_text_2.textContent = 'st day of every';
         } else if (last == '2' && penult != '1') {
@@ -2033,7 +2029,6 @@ function getRcrgLine(e) {
     entry.append(typebox, details, rcrg_details, deb_accts, cred_accts, summary_div);
     let els = getRcrgLineEls(entry);
     showHideEntryAcctBtns(els);
-    lockUnlockEntryAmts(els);
     entryAmtAutoComplete(els);
     return entry;
 }
@@ -2159,20 +2154,9 @@ function validateRcrgLine(line, quiet) {
     }
 }
 
-function rcrgTypeChanged(entry_container) {
-    let els = getRcrgLineEls(entry_container);
-    if (els.rcrtype.value == 'every') {
-        els.onlbl1.style.display = 'none';
-        els.onlbl2.style.display = 'none';
-        while (els.period.firstChild) {
-            els.period.firstChild.remove();
-        }
-        for (const option of els.every_opts) {
-            els.period.append(option);
-        }
-    } else {
-        els.onlbl1.style.display = 'inline';
-        els.onlbl2.style.display = 'inline';
+function updateRcrgOnText(rcrg_template_container) {
+    let els = getRcrgLineEls(rcrg_template_container);
+    if (els.rcrtype.value != 'every') {
         let last = els.qty.value ? els.qty.value.toString().substring(els.qty.value.toString().length - 1) : '';
         let penult = els.qty.value.toString().length > 1 ? els.qty.value.toString().substring(els.qty.value.toString().length - 2, els.qty.value.toString().length - 1) : '';
         if (last) {
@@ -2188,6 +2172,24 @@ function rcrgTypeChanged(entry_container) {
         } else {
             els.onlbl2.textContent = 'day of every';
         }
+    }
+}
+
+function rcrgTypeChanged(entry_container) {
+    let els = getRcrgLineEls(entry_container);
+    if (els.rcrtype.value == 'every') {
+        els.onlbl1.style.display = 'none';
+        els.onlbl2.style.display = 'none';
+        while (els.period.firstChild) {
+            els.period.firstChild.remove();
+        }
+        for (const option of els.every_opts) {
+            els.period.append(option);
+        }
+    } else {
+        updateRcrgOnText(entry_container);
+        els.onlbl1.style.display = 'inline';
+        els.onlbl2.style.display = 'inline';
         while (els.period.firstChild) {
             els.period.firstChild.remove();
         }
@@ -2302,6 +2304,7 @@ function editRcrg(entry_line) {
             els.rem_cred_acct_btns[i].disabled = false;
             els.cred_amts[i].disabled = false;
         }
+        lockUnlockEntryAmts(els);
     })
 }
 
@@ -2394,7 +2397,7 @@ function deleteRcrg(entry_line) {
         
         if (confirm(confirmMsg)) {
             let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
-            let startIndex = origEntry.starting_sheet_row_index;
+            let startIndex = origEntry.starting_sheet_row_index - 1; // deleteRows is index 0
             let endIndex = startIndex + noRows;
             let removeRcrgIndexFlags = async function() {
                 let flashMessage = 'Entry deleted.'
@@ -2470,9 +2473,12 @@ let rcrgClickHandler = function(e) {
 }
 
 let rcrgChangeHandler = function(e) {
-    if (e.target.classList.contains('rcrg_type') || e.target.classList.contains('rcrg_qty')) {
+    if (e.target.classList.contains('rcrg_type')) {
         let entry_container = e.target.parentElement.parentElement;
         rcrgTypeChanged(entry_container);
+    } else if (e.target.classList.contains('rcrg_qty')) {
+        let entry_container = e.target.parentElement.parentElement;
+        updateRcrgOnText(entry_container);
     }
 }
 
