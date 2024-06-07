@@ -66,14 +66,8 @@ let rcrgs = localStorage.getItem('rcrgs') ? JSON.parse(localStorage.getItem('rcr
 
 let eom_ledger;
 
-let flashedMessages = [];
-
 function flash(message) {
     alert(message);
-    flashedMessages.unshift(message);
-    let msgEl = document.createElement('p');
-    msgEl.textContent = message;
-    document.getElementById('flash_msg_history').firstChild.after(msgEl);
 }
 
 function insertCommas(float) {
@@ -148,7 +142,6 @@ async function bha_signedin() {
     document.getElementById('setup_open_journal').style.display = 'block';
     if (ssprops) {
         document.getElementById('setup_journal_name').style.display = 'block';
-        document.getElementById('flash_msg_history').style.display = 'block';
         uploadEntryQueue();
         bha_sync();
     }
@@ -179,7 +172,6 @@ async function bha_sync() {
     document.getElementById('journal_name').value = ssprops.properties.title;
     document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
     document.getElementById('edit_journal_name').disabled = false;
-    document.getElementById('flash_msg_history').style.display = 'block';
     document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
     document.getElementById('nav_menu').disabled = false;
 
@@ -2025,7 +2017,7 @@ function getRcrgLine(e) {
     delete_btn.textContent = 'delete';
     delete_btn.style.display = 'none';
     let inst_btn = mkc('inst_rcrg', 'button');
-    inst_btn.textContent = 'instantiate';
+    inst_btn.textContent = 'create entry';
     let countdown = mkc('rcrg_template_countdown');
     let expectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (e.hasOwnProperty('days_until_expected') ? e.days_until_expected : 0));
     countdown.style.display = e.hasOwnProperty('days_until_expected') ? 'block' : 'none';
@@ -2491,8 +2483,8 @@ function getNestedAccts(typecode) {
     }
     if (journal && journal.length > 0) {
         for (const row of journal) {
-            if (accountUsedInJournal.hasOwnProperty(row[4])) {
-                accountUsedInJournal[row[4]] = true;
+            if (accountUsedInJournal.hasOwnProperty(row[2])) {
+                accountUsedInJournal[row[2]] = true;
             }
         }
     }
@@ -3016,12 +3008,12 @@ async function editAcctSaveAcct(edit_acct_line) {
                     let entries_to_update = [];
                     for (let i = 0; i < journal.length; i++) {
                         let row = journal[i];
-                        if (row[4] == els.orig.name) {
+                        if (row[2] == els.orig.name) {
                             entries_to_update.push(i + 2)
                         }
                     }
                     for (const row_no of entries_to_update) {
-                        ssranges.push(`Journal!E${row_no}`);
+                        ssranges.push(`Journal!C${row_no}`);
                         ssvalues.push([[values.name]]);
                     }
                     // change the parent entry for all sub accounts
@@ -3110,7 +3102,7 @@ async function editAcctSaveAcct(edit_acct_line) {
                         return;
                     }
                 }
-                bha_sync();
+                await bha_sync();
                 while (document.getElementById('navbar_buttons').firstChild) {
                     document.getElementById('navbar_buttons').firstChild.remove();
                 }

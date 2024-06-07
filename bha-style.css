@@ -133,7 +133,7 @@ input:disabled, select:disabled {
     max-height: 2.25rem;
     background-color: #5F6E75;
     color: #F5CD78;
-    font-size: 0.8rem;
+    font-size: 0.83rem;
     font-family: 'Times New Roman', Times, serif;
 }
 #footer_firstline {
@@ -277,7 +277,7 @@ input:disabled, select:disabled {
     flex-wrap: wrap;
     align-items: baseline;
     margin-bottom: 0.5rem;
-    font-size: 0.8em;
+    font-size: 0.83rem;
     color: #5F6E75;
     font-weight: bold;
 }
@@ -322,7 +322,7 @@ input.required, select.required {
     background-color: #DAEDF7;
     color: #75675F;
     font-style: italic;
-    font-size:0.8rem
+    font-size:0.83rem
 }
 
 
@@ -339,7 +339,10 @@ input.required, select.required {
     text-decoration: none;
     color: #78CBF5;
 }
-
+#setup label {
+    font-size: 0.83rem;
+    font-weight: bold;
+}
 #setup_signin_instructions {
     font-weight: bold;
     margin: 0.75rem 2.5rem;
@@ -348,13 +351,19 @@ input.required, select.required {
 #setup_journal_name, #cancel_edit_journal_name, #save_journal_name, #setup_create_new_journal, #setup_open_journal, #flash_msg_history, #setup_previous_journals {
     display: none;
 }
+#setup_journal_name {
+    padding-bottom: 1.33em;
+    border-bottom: 2px solid #F5CD78;
+}
+#setup_open_journal {
+    margin-top: 1.33em;
+    border-top: 2px solid #F5CD78;
+}
 #setup_open_journal_line {
     margin: 0.75rem 0;
 }
 #setup_open_journal_instructions {
-    display: none;
-    margin: .5em 1em;
-    line-height:1.5em;
+    font-size: 0.83rem;
 }
 
 /* end of month eom review styles */
@@ -418,15 +427,18 @@ input.required, select.required {
 .ea_opts {
     padding: .5rem 0 0 1.75rem;
     display: flex;
+    align-items: baseline;
     flex-wrap: wrap;
     gap: 0.5em 1em;
 }
 .ea_opts label {
-    color: #75675F;
-    font-size: 0.9em;
+    color: #5F6E75;
+    font-size: 0.83rem;
+    font-weight: bold;
 }
 .ea_budget_opts {
     display: flex;
+    align-items: baseline;
     flex-wrap: wrap;
     gap: 0.5em 1em;
 }
