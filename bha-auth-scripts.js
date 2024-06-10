@@ -12,15 +12,24 @@ document.getElementById("disconnect_btn").style.display = 'none';
 
 function checkBeforeStart() {
     if (gapiInited && gisInited){
-      // Start only when both gapi and gis are initialized.
       document.getElementById("connect_btn").style.display = 'inline';
+      // FOR DEV ONLY - DOES IT BREAK THEIR NEW RULES?
+      if (localStorage.getItem('gapiTokenExp')) {
+          if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) {
+              gapi.client.setToken({access_token : localStorage.getItem('gapiToken')});
+              updateInterfaceForSignin();
+          } else {
+            localStorage.removeItem('gapiToken');
+            localStorage.removeItem('gapiTokenExp');
+          }
+      }
+      // END FOR DEV ONLY
     }
 }
 
 function gapiInit() {
   gapi.client.init({
     apiKey: API_KEY,
-    // NOTE: OAuth2 'scope' and 'client_id' parameters have moved to initTokenClient().
   })
   .then(function() {  
     gapi.client.load(DISCOVERY_DOC);
@@ -44,37 +53,199 @@ function gisInit() {
 }
 
 async function handleConnectClick() {
-
-  tokenClient.callback = (resp) => {
+  if (isSignedIn()) {
+    await bha_sync();
+  }
+  tokenClient.callback = async (resp) => {
     if (resp.error !== undefined) {
       throw(resp);
     }
-    // GIS has automatically updated gapi.client with the newly issued access token.
-    //console.log('gapi.client access token: ' + JSON.stringify(gapi.client.getToken()));
-    bha_signedin();
+    await justGotToken();
+    resetViewsAfterSync();
   }
-
-  // Conditionally ask users to select the Google Account they'd like to use,
-  // and explicitly obtain their consent to fetch their Calendar.
-  // NOTE: To request an access token a user gesture is necessary.
-  if (gapi.client.getToken() === null) {
-    // Prompt the user to select a Google Account and asked for consent to share their data
-    // when establishing a new session.
-    //tokenClient.requestAccessToken({prompt: 'consent'});
-    tokenClient.requestAccessToken();
-  } else {
-    // Skip display of account chooser and consent dialog for an existing session.
-    //tokenClient.requestAccessToken({prompt: ''});
-    tokenClient.requestAccessToken();
-  }
+  tokenClient.requestAccessToken();
 }
 
 function revokeToken() {
+  localStorage.removeItem('gapiToken');
+  localStorage.removeItem('gapiTokenExp');
   let cred = gapi.client.getToken();
   if (cred !== null) {
     google.accounts.oauth2.revoke(cred.access_token, () => {console.log('Revoked: ' + cred.access_token)});
     gapi.client.setToken('');
-    document.getElementById("connect_btn").textContent = 'sign in';
-    document.getElementById("disconnect_btn").style.display = 'none';
   }
+  updateInterfaceForSignout();
+}
+
+async function justGotToken() {
+  let now = new Date();
+  tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
+  
+  // FOR DEV ONLY does it break their new rules?
+  localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+  localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+  // END FOR DEV ONLY
+
+  if (ssprops) {
+      await uploadEntryQueue();
+      await bha_sync();
+  }
+  updateInterfaceForSignin();
+}
+
+function isSignedIn(callback) { // returns true/false as well, can be used without the callback. Can't do Async because oauth2's requestAccessToken() doesn't return a promise
+  let now = new Date();
+  let notSignedIn;
+  if (!gapi.client.getToken()) {
+      notSignedIn = true;
+  } else if (now.getTime() > tokenExpirationInMS) {
+      gapi.client.setToken('');
+      localStorage.removeItem('gapiToken');
+      localStorage.removeItem('gapiTokenExp');
+      updateInterfaceForSignout();
+      notSignedIn = true;
+  } 
+  if (notSignedIn) {
+      if (callback !== undefined) {
+          if (confirm('Must be signed in. Sign in now?')) {
+              tokenClient.callback = (resp) => {
+                  if (resp.error !== undefined) {
+                      throw(resp);
+                  }
+                  justGotToken();
+                  callback();
+                  tokenClient.callback = (resp) => { // reset to just justGotToken so we don't get a double edit or something weird if the requestaccesstoken function gets called without first redefining another callback.
+                      if (resp.error !== undefined) {
+                          throw(resp);
+                      }
+                      justGotToken();
+                  }
+                  return true;
+              }
+              tokenClient.requestAccessToken();
+          } else {
+              return false;
+          }
+      } else {
+          return false;
+      }
+  } else {
+      if (callback) callback();
+      return true;
+  }
+}
+
+async function bha_sync() {
+  if (!ssid) throw new Error('Unable to sync - missing spreadsheet ID');
+  today = new Date();
+  let ssprops_response;
+  try {
+      ssprops_response = await gapi.client.sheets.spreadsheets.get({
+          spreadsheetId: ssid, 
+          ranges: [
+              "Journal!A1", 
+              "Account List!A1", 
+              "Recurring Entries!A1"
+          ]
+      });
+  } catch (err) {
+      flash('error: ' + err.toString());
+      console.log(err);
+      return;
+  }
+  ssprops = ssprops_response.result;
+  localStorage.setItem('spreadsheet_properties', JSON.stringify(ssprops));
+
+  updateInterfaceForSignin();
+
+  if (!prevSSIDs.hasOwnProperty(ssid)) {
+      prevSSIDs[ssid] = ssprops.properties.title;
+      localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+  } else if (prevSSIDs[ssid] != ssprops.properties.title) {
+      prevSSIDs[ssid] = ssprops.properties.title;
+      localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+      for (const id in prevSSIDs) {
+          let opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = prevSSIDs[id];
+          prevSSIDsSelect.append(opt);
+      }
+  }
+  if (Object.keys(prevSSIDs).length > 1) {
+      document.getElementById('setup_previous_journals').style.display = 'block';
+  }
+
+  // fetch the whole spreadsheet
+  let response;
+  try {
+      response = await gapi.client.sheets.spreadsheets.values.batchGet({
+          spreadsheetId: ssid,
+          ranges: ['Account List!A2:D','Journal!A2:E','Recurring Entries!A2:G'],
+      });
+  } catch (err) {
+      flash(err.message);
+      return;
+  }
+  const result = response.result;
+  if (!result || !result.valueRanges || result.valueRanges.length == 0) {
+      flash('No values found.');
+      return;
+  }
+
+  let lastSync = `${mos[today.getMonth()]} ${today.getDate()}`;
+  localStorage.setItem('last_sync', lastSync);
+  document.getElementById('last_sync').textContent = `synced ${lastSync} `;
+
+  journal = result.valueRanges[1].values ? result.valueRanges[1].values : [];
+  
+  // FOR DEVELOPMENT ONLY:
+  localStorage.setItem('journal', JSON.stringify(journal ? journal : []));
+  // END FOR DEVELOPMENT ONLY
+
+  accts = result.valueRanges[0].values ? result.valueRanges[0].values : [];
+  localStorage.setItem('account_list', JSON.stringify(accts));
+
+  rcrgs = result.valueRanges[2].values ? result.valueRanges[2].values : [];
+  localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
+
+  eom_ledger = {};
+}
+
+async function resetViewsAfterSync() {
+  while (document.getElementById('ledgers_display').firstChild) document.getElementById('ledgers_display').firstChild.remove();
+  while (document.getElementById('journal').firstChild) document.getElementById('journal').firstChild.remove();
+  while (document.getElementById('eom_rev').firstChild) document.getElementById('eom_rev').firstChild.remove();
+  if (localStorage.getItem('lastPageViewed') == 'rcrg') populateRcrg();
+  populateEditAccts();
+}
+
+
+function updateInterfaceForSignin() {
+  document.getElementById('setup_signin_instructions').style.display = 'none';
+  document.getElementById('setup_create_new_journal').style.display = 'block';
+  document.getElementById('setup_open_journal').style.display = 'block';
+  if (ssprops) {
+      document.getElementById('top_title').textContent = ssprops.properties.title;
+      document.getElementById('setup_journal_name').style.display = 'block';
+      document.getElementById('journal_name').value = ssprops.properties.title;
+      document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
+      document.getElementById('edit_journal_name').disabled = false;
+      document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
+      document.getElementById('nav_menu').disabled = false;
+  }
+  document.getElementById('connect_btn').textContent = 'sync';
+  document.getElementById('disconnect_btn').style.display = 'inline';
+}
+
+
+
+function updateInterfaceForSignout() {
+  document.getElementById('connect_btn').textContent = 'sign in';
+  document.getElementById('disconnect_btn').style.display = 'none';
+  document.getElementById('setup_signin_instructions').style.display = 'block';
+  document.getElementById('setup_journal_name').style.display = 'none';
+  document.getElementById('setup_journal_name').style.display = 'none';
+  document.getElementById('edit_journal_name').disabled = true;
+  document.getElementById('setup_create_new_journal').style.display = 'none';
+  document.getElementById('setup_open_journal').style.display = 'none';
 }

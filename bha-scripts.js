@@ -14,13 +14,10 @@
 */
 
 // To-do: 
-/*
-handleConnectClick to refresh the lastPageViewed to actually achieve 'sync'
-*/
-/*
-NEED TO RE-READ THE SPREADSHEET BEFORE EDITING OR DELETING A ROW ? 
----If collaborating, could cause serious data loss if one person adds or delete rows between when another person syncs the spreadsheet and edits or deletes something
-*/
+
+// change doIfStillSynced functions to promise based rather than callback
+// identify the popup blocked error and prompt user
+// localization
 /*
 show running balance when viewing A/L/Q in Ledgers
 ---Force start date to BOY for viewing A/L/Q in Ledgers
@@ -63,6 +60,7 @@ let accts = localStorage.getItem('account_list') ? JSON.parse(localStorage.getIt
 //let journal; 
 // FOR DEVELOPMENT ONLY:
 let journal = localStorage.getItem('journal') ? JSON.parse(localStorage.getItem('journal')) : []; 
+let tokenExpirationInMS = localStorage.getItem('gapiTokenExp') ? parseInt(localStorage.getItem('gapiTokenExp')) : '';
 // END FOR DEVELOPMENT ONLY
 
 let rcrgs = localStorage.getItem('rcrgs') ? JSON.parse(localStorage.getItem('rcrgs')) : [];
@@ -81,7 +79,6 @@ function insertCommas(float) {
     return f;
 }
 
-
 /*
 module format:
 create objects from spreadsheet data
@@ -94,146 +91,7 @@ user command handlers updating spreadsheet
 event dispatchers
 */
 
-let tokenExpirationInMS;
-
-function isSignedIn(callback) {
-    let now = new Date();
-    let notSignedIn;
-    if (!gapi.client.getToken()) {
-        notSignedIn = true;
-    } else if (now.getTime() > tokenExpirationInMS) {
-        gapi.client.setToken('');
-        document.getElementById("connect_btn").textContent = 'sign in';
-        document.getElementById("disconnect_btn").style.display = 'none';
-        notSignedIn = true;
-    } 
-    if (notSignedIn) {
-        if (callback !== undefined) {
-            if (confirm('Must be signed in. Sign in now?')) {
-                tokenClient.callback = (resp) => {
-                    if (resp.error !== undefined) {
-                        throw(resp);
-                    }
-                    bha_signedin();
-                    callback();
-                    tokenClient.callback = (resp) => { // reset to just bha_signedin so we don't get a double edit or something weird if the requestaccesstoken function gets called without first redefining another callback.
-                        if (resp.error !== undefined) {
-                            throw(resp);
-                        }
-                        bha_signedin();
-                    }
-                    return true;
-                }
-                tokenClient.requestAccessToken();
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    } else {
-        if (callback) callback();
-        return true;
-    }
-}
-
-async function bha_signedin() {
-    let now = new Date();
-    tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
-    document.getElementById('connect_btn').textContent = 'sync';
-    document.getElementById('disconnect_btn').style.display = 'inline';
-    document.getElementById('setup_signin_instructions').style.display = 'none';
-    document.getElementById('setup_create_new_journal').style.display = 'block';
-    document.getElementById('setup_open_journal').style.display = 'block';
-    if (ssprops) {
-        document.getElementById('setup_journal_name').style.display = 'block';
-        uploadEntryQueue();
-        bha_sync();
-    }
-}
-
-async function bha_sync() {
-    if (!ssid) return;
-    today = new Date();
-    let ssprops_response;
-    try {
-        ssprops_response = await gapi.client.sheets.spreadsheets.get({
-            spreadsheetId: ssid, 
-            ranges: [
-                "Journal!A1", 
-                "Account List!A1", 
-                "Recurring Entries!A1"
-            ]
-        })
-    } catch (err) {
-        flash('error: ' + err.toString());
-        console.log(err);
-        return;
-    }
-    ssprops = ssprops_response.result;
-    localStorage.setItem('spreadsheet_properties', JSON.stringify(ssprops));
-    document.getElementById('top_title').textContent = ssprops.properties.title;
-    document.getElementById('setup_journal_name').style.display = 'block';
-    document.getElementById('journal_name').value = ssprops.properties.title;
-    document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
-    document.getElementById('edit_journal_name').disabled = false;
-    document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
-    document.getElementById('nav_menu').disabled = false;
-
-    if (!prevSSIDs.hasOwnProperty(ssid)) {
-        prevSSIDs[ssid] = ssprops.properties.title;
-        localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-    } else if (prevSSIDs[ssid] != ssprops.properties.title) {
-        prevSSIDs[ssid] = ssprops.properties.title;
-        localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-        for (const id in prevSSIDs) {
-            let opt = document.createElement('option');
-            opt.value = id;
-            opt.textContent = prevSSIDs[id];
-            prevSSIDsSelect.append(opt);
-        }
-    }
-    if (Object.keys(prevSSIDs).length > 1) {
-        document.getElementById('setup_previous_journals').style.display = 'block';
-    }
-
-    // fetch the whole spreadsheet
-    let response;
-    try {
-        response = await gapi.client.sheets.spreadsheets.values.batchGet({
-            spreadsheetId: ssid,
-            ranges: ['Account List!A2:D','Journal!A2:E','Recurring Entries!A2:G'],
-        });
-    } catch (err) {
-        flash(err.message);
-        return;
-    }
-    const result = response.result;
-    if (!result || !result.valueRanges || result.valueRanges.length == 0) {
-        flash('No values found.');
-        return;
-    }
-
-    let lastSync = `${mos[today.getMonth()]} ${today.getDate()}`;
-    localStorage.setItem('last_sync', lastSync);
-    document.getElementById('last_sync').textContent = `synced ${lastSync} `;
-
-    journal = result.valueRanges[1].values ? result.valueRanges[1].values : [];
-    
-    // FOR DEVELOPMENT ONLY:
-    localStorage.setItem('journal', JSON.stringify(journal ? journal : []));
-    // END FOR DEVELOPMENT ONLY
-
-    accts = result.valueRanges[0].values ? result.valueRanges[0].values : [];
-    localStorage.setItem('account_list', JSON.stringify(accts));
-
-    rcrgs = result.valueRanges[2].values ? result.valueRanges[2].values : [];
-    localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
-
-    eom_ledger = {};
-}
-
-// spreadsheet access functions
+// spreadsheet write functions
 function batchUpdateValues(ranges, values, callback) {
     /*
     ranges = ['Journal!A1', 'Sheet2!B']
@@ -308,8 +166,8 @@ async function appendValues(spreadsheetId, range, valueInputOption, _values, cal
     }
 }
 
-async function deleteRows(sheetName, startIndex, endIndex, callback) {
-    if (!startIndex || !endIndex) {
+async function deleteRows(sheetName, startIndex0, endIndex0, callback) {
+    if (!startIndex0 || !endIndex0) {
         return;
     }
 
@@ -340,8 +198,8 @@ async function deleteRows(sheetName, startIndex, endIndex, callback) {
                     */
                     range: {
                         sheetId: sheetId,
-                        startRowIndex: startIndex,
-                        endRowIndex: endIndex,
+                        startRowIndex: startIndex0,
+                        endRowIndex: endIndex0,
                     },
                     shiftDimension:'ROWS',
                 }
@@ -359,8 +217,9 @@ async function deleteRows(sheetName, startIndex, endIndex, callback) {
         return;
     }
 }
-async function insertRows(sheetName, startIndex, endIndex) {
-    if (!startIndex || !endIndex) {
+
+async function insertRows(sheetName, startIndex0, endIndex0) {
+    if (!startIndex0 || !endIndex0) {
         return;
     }
     let sheetId;
@@ -378,8 +237,8 @@ async function insertRows(sheetName, startIndex, endIndex) {
                     range: {
                         sheetId: sheetId,
                         dimension: 'ROWS',
-                        startIndex: startIndex,
-                        endIndex: endIndex,
+                        startIndex: startIndex0,
+                        endIndex: endIndex0,
                     },
                     inheritFromBefore: true,
                 }
@@ -409,15 +268,16 @@ function getAcctOptEls(type, selected_acct_name) {
     }
     return a;
 }
+
 function mk(element) { //make
     return document.createElement(element ? element : 'div');
 }
+
 function mkc(_class, _element) { // mk= make; c = by class name
     let el = document.createElement(_element ? _element : 'div');
     el.classList.add(_class);
     return el;
 }
-
 
 // BEGIN navbar control
 function goToPage(page) {
@@ -538,7 +398,7 @@ function getEntryInputLine(e) {
         cred_amts: [float],
         debits: float,
         credits: float,
-        starting_sheet_row_index = int,
+        start_sheet_index1 = int,
     }
     */
     let typeVal = e.hasOwnProperty('type') ? e.type : '';
@@ -975,7 +835,6 @@ function entryAmtAutoComplete(els) {
     }
 }
 
-
 function lockUnlockEntryAmts(els) {
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         els.deb_amts[0].disabled = false;
@@ -1064,7 +923,7 @@ function addToEntryQueue(entries) {
                 if (resp.error !== undefined) {
                     throw(resp);
                 }
-                bha_signedin(); // upload entries happens here
+                justGotToken(); // upload entries happens here
             }
             tokenClient.requestAccessToken();
         }
@@ -1120,6 +979,7 @@ function entryRemAcctClk(entry_acct_div) {
     lockUnlockEntryAmts(els);
     entryAmtAutoComplete(els);
 }
+
 function splitEntry(entry_line) {
     let els = getEntryInputElements(entry_line);
     els.split.style.display = 'none';
@@ -1241,7 +1101,7 @@ function processJournal(raw, startingSSRowIndex1) {
         cred_amts: [float],
         debits: float,
         credits: float,
-        starting_sheet_row_index = int,
+        start_sheet_index1 = int,
     }]
     */
 
@@ -1297,7 +1157,7 @@ function processJournal(raw, startingSSRowIndex1) {
         debits: 0,
         credits: 0,
     };
-    if (parseInt(startingSSRowIndex1)) entry.starting_sheet_row_index = parseInt(startingSSRowIndex1);
+    if (parseInt(startingSSRowIndex1)) entry.start_sheet_index1 = parseInt(startingSSRowIndex1);
 
     for (let i = 0; i < raw.length; i++) {
         let date = raw[i][0];
@@ -1316,7 +1176,7 @@ function processJournal(raw, startingSSRowIndex1) {
                 debits: 0,
                 credits: 0,
             };
-            if (parseInt(startingSSRowIndex1)) entry.starting_sheet_row_index = i + parseInt(startingSSRowIndex1);
+            if (parseInt(startingSSRowIndex1)) entry.start_sheet_index1 = i + parseInt(startingSSRowIndex1);
         }
         entry.date = date;
         entry.desc = desc;
@@ -1371,6 +1231,7 @@ function getJournalEntriesByDate(fromDate, toDate) {
     entryList = mergeSortEntriesByDate(entryList);
     return entryList;
 }
+
 function mergeSortEntriesByDate(arr) {
     function mergeEntriesByDate(left, right) {
         let sorted = [];
@@ -1389,6 +1250,7 @@ function mergeSortEntriesByDate(arr) {
     let right = mergeSortEntriesByDate(arr.slice(mid));
     return mergeEntriesByDate(left, right);
 }
+
 function isDateBefore(date1, date2) { // 'yyyy-mm-dd'
     let sy = parseInt(date1.substring(0,4));
     let sm = parseInt(date1.substring(5,7));
@@ -1415,6 +1277,7 @@ function initializeJournal() {
     btn.onclick = displayJournalEntriesByDate;
     document.getElementById('navbar_buttons').append(fromdate, s, todate, btn);
 }
+
 let displayJournalEntriesByDate = function() {
     let fdt = document.getElementById('journal_from_date').value;
     let tdt = document.getElementById('journal_to_date').value;
@@ -1422,6 +1285,32 @@ let displayJournalEntriesByDate = function() {
     let target = document.getElementById('journal');
     while (target.firstChild) target.firstChild.remove();
     for (const entry of entryList) target.append(getEntryInputLine(entry));
+}
+
+async function doIfEntryStillSynced(entry_line, callback) { // calling function will have already checked if we're signed in
+    const localOrigEntry = getEntryInputElements(entry_line).entry_data;
+    const start_row = localOrigEntry.start_sheet_index1;
+    const end_row = start_row - 1 + localOrigEntry.deb_accts.length + localOrigEntry.cred_accts.length;
+    let database_response;
+    try {
+        database_response = await gapi.client.sheets.spreadsheets.values.batchGet({
+            spreadsheetId: ssid,
+            ranges: [`Journal!A${start_row}:E${end_row}`]
+        });
+    } catch(err) {
+        flash('Error');
+        console.log(err);
+        return;
+    }
+    let entryOnLiveDB = processJournal(database_response.result.valueRanges[0].values)[0];
+    if (localOrigEntry.date == entryOnLiveDB.date && localOrigEntry.desc == entryOnLiveDB.desc && localOrigEntry.deb_accts.length == entryOnLiveDB.deb_accts.length && localOrigEntry.cred_accts.length == entryOnLiveDB.cred_accts.length) {
+        callback();
+    } else {
+        flash('Entry in journal has become unsynced. Please try again.');
+        await bha_sync();
+        entry_line.remove();
+        displayJournalEntriesByDate();
+    }
 }
 
 function editEntry(entry_line) {
@@ -1493,47 +1382,49 @@ function cancelEditEntry(entry_line) {
 function saveEntry(entry_line) { 
     isSignedIn(() => {
         if (validateEntryInputs(entry_line)) {
-            let els = getEntryInputElements(entry_line);
-            let entries = [];
-            let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
-            for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-                let entry = [
-                    els.date.value,
-                    els.entry_data.hasOwnProperty('rcrgindex') ? els.desc.value + 'RCRG' + els.entry_data.rcrgindex : els.desc.value
-                ];
-                if (i < els.deb_accts.length) {
-                    entry.push(els.deb_accts[i].value);
-                    entry.push(els.deb_amts[i].value);
-                    entry.push('');
-                } else {
-                    let j = i - els.deb_accts.length;
-                    entry.push(els.cred_accts[j].value);
-                    entry.push('');
-                    entry.push(els.cred_amts[j].value);
+            doIfEntryStillSynced(entry_line, () => {
+                let els = getEntryInputElements(entry_line);
+                let entries = [];
+                let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
+                for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+                    let entry = [
+                        els.date.value,
+                        els.entry_data.hasOwnProperty('rcrgindex') ? els.desc.value + 'RCRG' + els.entry_data.rcrgindex : els.desc.value
+                    ];
+                    if (i < els.deb_accts.length) {
+                        entry.push(els.deb_accts[i].value);
+                        entry.push(els.deb_amts[i].value);
+                        entry.push('');
+                    } else {
+                        let j = i - els.deb_accts.length;
+                        entry.push(els.cred_accts[j].value);
+                        entry.push('');
+                        entry.push(els.cred_amts[j].value);
+                    }
+                    entries.push(entry);
                 }
-                entries.push(entry);
-            }
-            if (entries.length > origNumberRows) {
-                let rowsToAdd = entries.length - origNumberRows;
-                let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
-                let endIndex = startIndex + rowsToAdd;
-                insertRows('Journal', startIndex, endIndex)
-            }
-            if (entries.length < origNumberRows) {
-                let rowsToDelete = origNumberRows - entries.length;
-                let start = els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete;
-                let end = els.entry_data.starting_sheet_row_index + origNumberRows;
-                deleteRows('Journal', start, end);
-            }
-            batchUpdateValues(
-                ['Journal!A' + els.entry_data.starting_sheet_row_index],
-                [entries],
-                function() {
-                    bha_sync();
-                    flash('Entry saved');
-                    cancelEditEntry(entry_line);
+                if (entries.length > origNumberRows) {
+                    let rowsToAdd = entries.length - origNumberRows;
+                    let startIndex = els.entry_data.start_sheet_index1 - 1 + origNumberRows;
+                    let endIndex = startIndex + rowsToAdd;
+                    insertRows('Journal', startIndex, endIndex)
                 }
-            )
+                if (entries.length < origNumberRows) {
+                    let rowsToDelete = origNumberRows - entries.length;
+                    let start = els.entry_data.start_sheet_index1 - 1 + origNumberRows - rowsToDelete;
+                    let end = start + rowsToDelete;
+                    deleteRows('Journal', start, end);
+                }
+                batchUpdateValues(
+                    ['Journal!A' + els.entry_data.start_sheet_index1],
+                    [entries],
+                    function() {
+                        bha_sync();
+                        flash('Entry saved');
+                        cancelEditEntry(entry_line);
+                    }
+                );
+            });
         }
     });
 }
@@ -1541,7 +1432,7 @@ function saveEntry(entry_line) {
 function mkRcrg(entry_line) {
     isSignedIn(() => {
         let els = getEntryInputElements(entry_line);
-        let newIndex = getNewRcrgIndex();
+        let newIndex = getNewRcrgIndex(); // might be superfluous, we get the actual new one the moment we submit. Need to check if bug when removed.
         let template = {
             type: els.entry_data.hasOwnProperty('type') ? els.entry_data.type : '',
             index: newIndex,
@@ -1615,7 +1506,7 @@ function processRcrgs(raw, startingSSRowIndex1) {
         cred_amts: [float],
         debits: float,
         credits: float,
-        starting_sheet_row_index = int,
+        start_sheet_index1 = int,
     }]
     */
     function finalize(entry) {
@@ -1669,7 +1560,7 @@ function processRcrgs(raw, startingSSRowIndex1) {
         debits: 0,
         credits: 0,
     };
-    if (ssIndex) entry.starting_sheet_row_index = ssIndex;
+    if (ssIndex) entry.start_sheet_index1 = ssIndex;
     for (let i = 0; i < raw.length; i++) {
         const rcrtype = raw[i][0];
         const qty = parseInt(raw[i][1]);
@@ -1690,7 +1581,7 @@ function processRcrgs(raw, startingSSRowIndex1) {
                 debits: 0,
                 credits: 0,
             };
-            if (ssIndex) entry.starting_sheet_row_index = i + ssIndex;
+            if (ssIndex) entry.start_sheet_index1 = i + ssIndex;
         }
         entry.desc = desc;
         entry.index = index;
@@ -1827,7 +1718,7 @@ function getRcrgLine(e) {
         cred_amts: [float],
         debits: float,
         credits: float,
-        starting_sheet_row_index = int,
+        start_sheet_index1 = int,
     } */
     let typeVal = e.hasOwnProperty('type') ? e.type : '';
     let deb_acctsVal = e.hasOwnProperty('deb_accts') ? e.deb_accts : [];
@@ -1929,7 +1820,6 @@ function getRcrgLine(e) {
     if (e.hasOwnProperty('qty')) {
         const last = e.qty.toString().substring(e.qty.toString().length - 1);
         let penult = e.qty.toString().length > 1 ? e.qty.toString().substring(e.qty.toString().length - 2, e.qty.toString().length - 1) : '';
-        console.log(last == '1' || last == '3', penult != 1);
 
         if (last == '1' && penult != '1') {
             on_text_2.textContent = 'st day of every';
@@ -2212,7 +2102,7 @@ function getNewRcrgIndex() {
 
 function createRcrg(type) {
     isSignedIn(() => {
-        let newIndex = getNewRcrgIndex();
+        let newIndex = getNewRcrgIndex();  // might be superfluous, we get the actual new one the moment we submit. Need to check if bug when removed.
         let div = getRcrgLine({
             type: type,
             index: newIndex
@@ -2237,11 +2127,24 @@ function createRcrg(type) {
     });
 }
 
-function submitNewRcrg(entry_container) {
-    isSignedIn(() => {
+async function submitNewRcrg(entry_container) {
+    isSignedIn(async () => {
         if (validateRcrgLine(entry_container, false)) {
+            let rcrgs_response;
+            try {
+                rcrgs_response = await gapi.client.sheets.spreadsheets.values.batchGet({
+                    spreadsheetId: ssid,
+                    ranges: ['Recurring Entries!A1:G']
+                });
+            } catch(err) {
+                flash('Error' + err.toString());
+                console.log(err);
+                return;
+            }
+            rcrgs = rcrgs_response.result.valueRanges[0].values; // update rcrgs before getting a new index
+
+            let index = getNewRcrgIndex();
             let els = getRcrgLineEls(entry_container);
-            let index = els.entry_data.index;
             let type = els.rcrtype.value;
             let qty = els.qty.value;
             let period = els.period.value;
@@ -2274,6 +2177,32 @@ function submitNewRcrg(entry_container) {
             });
         }
     })
+}
+
+async function doIfRcrgStillSynced(rcrg_line, callback) { // calling function will have already checked if we're signed in
+    const localOrigEntry = getEntryInputElements(rcrg_line).entry_data;
+    const start_row = localOrigEntry.start_sheet_index1;
+    const end_row = start_row - 1 + localOrigEntry.deb_accts.length + localOrigEntry.cred_accts.length;
+    let database_response;
+    try {
+        database_response = await gapi.client.sheets.spreadsheets.values.batchGet({
+            spreadsheetId: ssid,
+            ranges: [`Recurring Entries!A${start_row}:G${end_row}`]
+        });
+    } catch(err) {
+        flash('Error');
+        console.log(err);
+        return;
+    }
+    let entryOnLiveDB = processRcrgs(database_response.result.valueRanges[0].values)[0];
+    if (localOrigEntry.rcrtype == entryOnLiveDB.rcrtype && localOrigEntry.qty == entryOnLiveDB.qty && localOrigEntry.period == entryOnLiveDB.period && localOrigEntry.desc == entryOnLiveDB.desc && localOrigEntry.deb_accts.length == entryOnLiveDB.deb_accts.length && localOrigEntry.cred_accts.length == entryOnLiveDB.cred_accts.length) {
+        callback();
+    } else {
+        flash('Spreadsheet has become unsynced. Please try again.');
+        await bha_sync();
+        rcrg_line.remove();
+        populateRcrg();
+    }
 }
 
 function editRcrg(entry_line) {
@@ -2340,88 +2269,95 @@ function cancelRcrg(entry_line) {
 async function saveRcrg(entry_line) { 
     isSignedIn(async () => {
         if (validateRcrgLine(entry_line)) {
-            let els = getRcrgLineEls(entry_line);
-            let entries = [];
-            let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
-            for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-                let entry = [
-                    els.rcrtype.value,
-                    els.qty.value,
-                    els.period.value,
-                    els.desc.value + 'RCRG' + els.entry_data.index
-                ];
-                if (i < els.deb_accts.length) {
-                    entry.push(els.deb_accts[i].value);
-                    entry.push(els.deb_amts[i].value);
-                    entry.push('');
-                } else {
-                    let j = i - els.deb_accts.length;
-                    entry.push(els.cred_accts[j].value);
-                    entry.push('');
-                    entry.push(els.cred_amts[j].value);
+            doIfRcrgStillSynced(entry_line, async () => {
+                let els = getRcrgLineEls(entry_line);
+                let entries = [];
+                let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
+                for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+                    let entry = [
+                        els.rcrtype.value,
+                        els.qty.value,
+                        els.period.value,
+                        els.desc.value + 'RCRG' + els.entry_data.index
+                    ];
+                    if (i < els.deb_accts.length) {
+                        entry.push(els.deb_accts[i].value);
+                        entry.push(els.deb_amts[i].value);
+                        entry.push('');
+                    } else {
+                        let j = i - els.deb_accts.length;
+                        entry.push(els.cred_accts[j].value);
+                        entry.push('');
+                        entry.push(els.cred_amts[j].value);
+                    }
+                    entries.push(entry);
                 }
-                entries.push(entry);
-            }
-            if (entries.length > origNumberRows) {
-                let rowsToAdd = entries.length - origNumberRows;
-                let startIndex = els.entry_data.starting_sheet_row_index + origNumberRows;
-                let endIndex = startIndex + rowsToAdd;
-                await insertRows('Recurring Entries', startIndex, endIndex);
-            } else if (entries.length < origNumberRows) {
-                let rowsToDelete = origNumberRows - entries.length;
-                await deleteRows('Recurring Entries', els.entry_data.starting_sheet_row_index + origNumberRows - rowsToDelete, els.entry_data.starting_sheet_row_index + origNumberRows);
-            }
-            batchUpdateValues(
-                [`Recurring Entries!A${els.entry_data.starting_sheet_row_index}`],
-                [entries],
-                async function() {
-                    await bha_sync();
-                    flash('Recurring template saved');
-                    entry_line.remove();
-                    populateRcrg();
+                if (entries.length > origNumberRows) {
+                    let rowsToAdd = entries.length - origNumberRows;
+                    let startIndex = els.entry_data.start_sheet_index1 - 1 + origNumberRows;
+                    let endIndex = startIndex + rowsToAdd;
+                    await insertRows('Recurring Entries', startIndex, endIndex);
+                } else if (entries.length < origNumberRows) {
+                    let rowsToDelete = origNumberRows - entries.length;
+                    const startIndex = els.entry_data.start_sheet_index1 - 1 + origNumberRows - rowsToDelete;
+                    const endIndex = startIndex + rowsToDelete;
+                    await deleteRows('Recurring Entries', startIndex, endIndex);
                 }
-            )
+                batchUpdateValues(
+                    [`Recurring Entries!A${els.entry_data.start_sheet_index1}`],
+                    [entries],
+                    async function() {
+                        await bha_sync();
+                        flash('Recurring template saved');
+                        entry_line.remove();
+                        populateRcrg();
+                    }
+                );
+
+            });
         }
     })
 }
 
 function deleteRcrg(entry_line) {
     isSignedIn(() => {
-        let confirmMsg = 'Are you sure?';
+        doIfRcrgStillSynced(entry_line, async () => {
+            let confirmMsg = 'Are you sure?';
 
-        let origEntry = JSON.parse(entry_line.dataset.origentry);
-        let no_entries = 0;
-        let indexRE = new RegExp(`RCRG${origEntry.index}$`);
-        for (const row of journal) if (indexRE.test(row[1])) no_entries++;
-        if (no_entries > 0) confirmMsg += ` This will also remove the recurring flag from ${no_entries} journal entries`;
-        
-        if (confirm(confirmMsg)) {
-            let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
-            let startIndex = origEntry.starting_sheet_row_index - 1; // deleteRows is index 0
-            let endIndex = startIndex + noRows;
-            let removeRcrgIndexFlags = async function() {
-                let flashMessage = 'Entry deleted.'
-                let ranges = [];
-                let values = [];
-                let indexRE = new RegExp(`RCRG${origEntry.index}$`);
-                for (let i = 0; i < journal.length; i++) {
-                    let row = journal[i];
-                    if (indexRE.test(row[1])) {
-                        ranges.push(`Journal!B${i + 2}`);
-                        let desc = row[1].substring(0,row[1].indexOf('RCRG'));
-                        values.push([[desc]]);
+            let origEntry = JSON.parse(entry_line.dataset.origentry);
+            let no_entries = 0;
+            let indexRE = new RegExp(`RCRG${origEntry.index}$`);
+            for (const row of journal) if (indexRE.test(row[1])) no_entries++;
+            if (no_entries > 0) confirmMsg += ` This will also remove the recurring flag from ${no_entries} journal entries`;
+            
+            if (confirm(confirmMsg)) {
+                let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
+                let startIndex = origEntry.start_sheet_index1 - 1; // deleteRows is index 0
+                let endIndex = startIndex + noRows;
+                let removeRcrgIndexFlags = async function() {
+                    let flashMessage = 'Entry deleted.'
+                    let ranges = [];
+                    let values = [];
+                    let indexRE = new RegExp(`RCRG${origEntry.index}$`);
+                    for (let i = 0; i < journal.length; i++) {
+                        let row = journal[i];
+                        if (indexRE.test(row[1])) {
+                            ranges.push(`Journal!B${i + 2}`);
+                            let desc = row[1].substring(0,row[1].indexOf('RCRG'));
+                            values.push([[desc]]);
+                        }
                     }
-                }
-                batchUpdateValues(ranges, values, function() {
-                    flashMessage += ` Recurring flag removed from ${ranges.length} journal rows.`;
-                    entry_line.remove();
-                    bha_sync();
-                    flash(flashMessage);
-                })
+                    batchUpdateValues(ranges, values, function() {
+                        flashMessage += ` Recurring flag removed from ${ranges.length} journal rows.`;
+                        entry_line.remove();
+                        bha_sync();
+                        flash(flashMessage);
+                    })
 
+                }
+                deleteRows('Recurring Entries', startIndex, endIndex, removeRcrgIndexFlags);
             }
-            deleteRows('Recurring Entries', startIndex, endIndex, removeRcrgIndexFlags);
-        }
+        });
     })
 }
 
@@ -3479,10 +3415,9 @@ let editAcctChangeHandler = function(e) {
         editAcctShowHideOptions(edit_acct_line);
     }
 }
-// END MODULE Edit Accts
 
-// BEGIN MODULE Ledgers
-// process the journal into ledger {name: {debit:num; credit:num, etc.}}
+// END MODULE Edit Accts BEGIN MODULE Ledgers
+
 function get_ledger(from_date, to_date, type) { // date = '2024-05-24'; type = 'A'
     /* returns
     {
@@ -3599,6 +3534,7 @@ function get_ledger(from_date, to_date, type) { // date = '2024-05-24'; type = '
     }
     return accts_list;
 }
+
 function initializeLedgers() {
     let from_date_input = document.createElement('input');
     from_date_input.id = 'ledger_from_date';
@@ -3654,6 +3590,7 @@ function handleLedgersQuery() {
         target.append(line);
     }
 }
+
 function getLedgerLine(acct, data) {
     let div = mkc('ledger_line');
     div.dataset.acct = acct;
@@ -3761,6 +3698,7 @@ function toggleLedgerSubs(ledger_line) {
         }
     }
 }
+
 function toggleLedgerEntries(ledger_line) {
     let els = getLedgerLineEls(ledger_line);
     if (els.entries.style.display == 'none') {
@@ -3782,6 +3720,7 @@ function ledgersClickHandler(e) {
         toggleLedgerEntries(ledger_line);
     }
 }
+
 // END MODULE Ledgers BEGIN MODULE EOM Review 
 
 function initializeEomRev() {
@@ -3820,7 +3759,7 @@ function getEomLedger(m, y) {
         earned: float,
         surplus: float,
         deficit: float,
-        budgeted_amt: float,
+        budget_nm: float,
         rollover_amt: float
         projected_amt: float,
         accts: {
@@ -3849,25 +3788,25 @@ function getEomLedger(m, y) {
     let ledger = {accts: {}};
     let l = get_ledger(`${y}-${m.toString().padStart(2, '0')}-01`, `${y}-${m.toString().padStart(2, '0')}-${ld.getDate().toString().padStart(2, '0')}`, 'E');
     let r = get_ledger(`${y}-${m.toString().padStart(2, '0')}-01`, `${y}-${m.toString().padStart(2, '0')}-${ld.getDate().toString().padStart(2, '0')}`, 'R');
-    for (const k in r) {
-        l[k] = r[k];
-    } 
+    for (const k in r) l[k] = r[k];
     let spent = 0;
     let earned = 0;
+    let budget_lm = 0;
+    let rollover_lm = 0;
     let surplus;
     let deficit;
-    let budgeted_amt = 0;
+    let budget_nm = 0;
     let projected_amt = 0;
     for (let name in l) {
         let acct = l[name];
-        if (acct.debit == 0 && acct.credit == 0 && acct.debit_from_subs == 0 && acct.credit_from_subs == 0 && !acct.types.includes('B')) {
-            continue;
-        } else {
+        if (acct.debit != 0 || acct.credit != 0 || acct.debit_from_subs != 0 || acct.credit_from_subs != 0 || acct.types.includes('B')) {
             if (acct.types.includes('E')) {
                 spent += acct.debit;
-                budgeted_amt += acct.budgeted_amt;
+                spent -= acct.credit;
+                budget_nm += acct.budgeted_amt;
             } else if (acct.types.includes('R')) {
                 earned += acct.credit;
+                earned -= acct.debit;
                 projected_amt += acct.budgeted_amt;
             }
             if ((acct.types.includes('E') && !acct.debit) || (acct.types.includes('R') && !acct.credit)) {
@@ -3894,11 +3833,20 @@ function getEomLedger(m, y) {
                 }
     
                 if (entry.desc.substring(0,20) == 'OPENING ENTRY Budget') {
-                    acct.budgeted_this_month = entry.cred_amts[0];
+                    if (acct.types.includes('E')) {
+                        acct.budgeted_this_month = entry.cred_amts[0]; 
+                        spent += entry.cred_amts[0]; 
+                        budget_lm += entry.cred_amts[0];
+                    } else if (acct.types.includes('R')) {
+                        acct.budgeted_this_month = entry.deb_amts[0];
+                        earned += entry.deb_amts[0];
+                    }
                 }
     
                 if (acct.types.includes('E') && entry.desc.substring(0,31) == 'OPENING ENTRY Retained Earnings') {
                     acct.rolled_over_this_month = entry.cred_amts[0];
+                    spent += entry.cred_amts[0];
+                    rollover_lm += entry.cred_amts[0];
                 }
             }
             ledger.accts[name] = acct;
@@ -3915,7 +3863,9 @@ function getEomLedger(m, y) {
     ledger.earned = parseFloat(earned.toFixed(2));
     ledger.surplus = surplus ? parseFloat(surplus.toFixed(2)) : surplus;
     ledger.deficit = deficit ? parseFloat(deficit.toFixed(2)) : deficit;
-    ledger.budgeted_amt = parseFloat(budgeted_amt.toFixed(2));
+    ledger.budget_lm = parseFloat(budget_lm.toFixed(2));
+    ledger.rollover_lm = parseFloat(rollover_lm.toFixed(2));
+    ledger.budget_nm = parseFloat(budget_nm.toFixed(2));
     ledger.projected_amt = parseFloat(projected_amt.toFixed(2));
     ledger.rollover_amt = 0;
     return ledger;
@@ -4002,11 +3952,15 @@ function popEomDisplay(ledger) {
     let lmo = mkc('eom_summary_month');
     lmo.textContent = `${rev_mo} ${y}:`;
     let lm_summ = mk();
+    let lm_bud = mk();
+    lm_bud.textContent = `Budgeted: $${insertCommas(ledger.budget_lm.toFixed(2))}`;
+    let lm_roll = mk();
+    lm_roll.textContent = `Rolled over: $${insertCommas(ledger.rollover_lm.toFixed(2))}`;
     let lm_spent = mk();
     lm_spent.textContent = `Spent: $${insertCommas(ledger.spent.toFixed(2))}`;
     let lm_earned = mk();
     lm_earned.textContent = `Earned: $${insertCommas(ledger.earned.toFixed(2))}`;
-    lm_summ.append(lm_spent, lm_earned);
+    lm_summ.append(lm_bud, lm_roll, lm_spent, lm_earned);
     eom_summ_lm.append(lmo, lm_summ);
     let eom_summ_nm = mkc('eom_summary_next_month');
     let nmo = mkc('eom_summary_month');
@@ -4014,7 +3968,7 @@ function popEomDisplay(ledger) {
     let nm_summ = mk();
     let nm_budgeted = mk();
     nm_budgeted.id = 'eom_summary_next_month_budgeted';
-    nm_budgeted.textContent = `Budgeted expenses: $${insertCommas(ledger.budgeted_amt.toFixed(2))}`;
+    nm_budgeted.textContent = `Budgeted expenses: $${insertCommas(ledger.budget_nm.toFixed(2))}`;
     let nm_projected = mk();
     nm_projected.id = 'eom_summary_next_month_projected';
     nm_projected.textContent = `Projected income: $${insertCommas(ledger.projected_amt.toFixed(2))}`;
@@ -4022,8 +3976,8 @@ function popEomDisplay(ledger) {
     eom_summ_nm.append(nmo, nm_summ);
     eom_summary.append(eom_summ_lm, eom_summ_nm);
     let eom_submit = mkc('eom_submit', 'button');
-    eom_submit.style.display = ledger.spent || ledger.earned || ledger.budgeted_amt || ledger.projected_amt ? 'inline' : 'none';
-    eom_submit.textContent = `Submit ${rev_month} ${y} P&L${ledger.budgeted_amt || ledger.projected_amt ? ` and ${nxt_month} ${m == 12 ? y + 1 : y} opening budget` : ''}`;
+    eom_submit.style.display = ledger.spent || ledger.earned || ledger.budget_lm || ledger.rollover_lm || ledger.budget_nm || ledger.projected_amt ? 'inline' : 'none';
+    eom_submit.textContent = `Submit ${ledger.spent || ledger.earned || ledger.budget_lm || ledger.rollover_lm ? `${rev_month} ${y} P&L` : '' } ${(ledger.spent || ledger.earned || ledger.budget_lm || ledger.rollover_lm) && (ledger.budget_nm || ledger.projected_amt) ? 'and ' : ''}${ledger.budget_nm || ledger.projected_amt ? `${nxt_month} ${m == 12 ? y + 1 : y} opening budget` : ''}`;
     eom_summary.append(eom_submit);
     eom_rev.append(eom_summary);
 }
@@ -4141,6 +4095,7 @@ function adjNMBud(ledger_line) {
     els.budget.value = cut_amt;
     NMBudgetChanged(ledger_line)
 }
+
 function rolloverSurplus(ledger_line) {
     let acct = ledger_line.dataset.acct;
     let a = eom_ledger[acct];
@@ -4191,6 +4146,7 @@ function NMRolloverChanged(ledger_line) {
 let eomClickHandler = function(e) {
     if (e.target.classList.contains('nm_adj_bud')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement;
+        console.log(ledger_line);
         adjNMBud(ledger_line);
     }
     if (e.target.classList.contains('adj_ro_btn')) {
@@ -4203,6 +4159,7 @@ let eomClickHandler = function(e) {
     }
     
 }
+
 let eomChangeHandler = function(e) {
     if (e.target.classList.contains('nm_bud')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement.parentElement;
@@ -4213,10 +4170,9 @@ let eomChangeHandler = function(e) {
         NMRolloverChanged(ledger_line);
     }
 }
-// END MODULE EOM Review 
 
+// END MODULE EOM Review BEGIN MODULE general setup
 
-// BEGIN MODULE general setup
 async function saveSsid() {
     isSignedIn(async () => { // don't delete prevSSIDs
         localStorage.removeItem('spreadsheetID');
@@ -4402,6 +4358,7 @@ async function createSpreadsheet() {
         goToPage('add_entry');
     })
 }
+
 async function saveJournalName(name) {
     isSignedIn(async () => {
         try {
@@ -4451,7 +4408,16 @@ function validateSSID(input) {
         let newVal = val.substring(val.indexOf('d/') + 2, val.indexOf('/edit'));
         input.value = newVal;
     }
-    input.size = input.value.length;
+    input.size = input.value.length > 20 ? input.value.length : 20;
+    document.getElementById('open_journal_btn').disabled = false;
+}
+
+function validatePastedSSID(event) {
+    let url = event.clipboardData.getData('text/plain');
+    event.preventDefault();
+    if (url.includes('d/') && url.includes('/edit')) url = url.substring(url.indexOf('d/') + 2, url.indexOf('/edit'));
+    event.target.value = url;
+    document.getElementById('open_journal_btn').disabled = false;
 }
 
 let setupClickHandler = function(e) {
@@ -4488,13 +4454,20 @@ let setupClickHandler = function(e) {
 
 let setupChangeHandler = function(e) {
     if (e.target.id == 'open_journal_select') {
-        document.getElementById('ssid').value = e.target.value;
+        let input = document.getElementById('ssid');
+        input.value = e.target.value;
+        validateSSID(input);
     } else if (e.target.id == 'ssid') {
         validateSSID(e.target);
-    };
+    }
+}
+
+const setupPasteHandler = function(e) {
+    if (e.target.id == 'ssid') {
+        validatePastedSSID(e);
+    }
 }
 // END MODULE general setup
-
 
 // BEGIN CODE TO EXECUTE ONLOAD
 
@@ -4545,3 +4518,4 @@ document.getElementById('content').addEventListener('click', editAcctClickHandle
 document.getElementById('content').addEventListener('change', editAcctChangeHandler);
 document.getElementById('content').addEventListener('click', setupClickHandler);
 document.getElementById('content').addEventListener('change', setupChangeHandler);
+document.getElementById('content').addEventListener('paste', setupPasteHandler);

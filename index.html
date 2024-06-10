@@ -70,6 +70,7 @@
                             <option value="">No template</option>
                             <option value="home">Household</option>
                             <option value="estate">Estate</option>
+                            <!--<option value="schc">Sole proprietorship</option>-->
                         </select>
                         <button id="new_ss">create</button>
                     </div>
@@ -77,11 +78,11 @@
                 <div id="setup_open_journal">
                     <h4>Open journal:</h4>
                     <div>
-                        <span id="setup_open_journal_instructions">Open an existing q͜ʘ journal using its URL or Google Sheets ID. Locate the journal in <a href="https://docs.google.com/spreadsheets/u/0/" title="Google Sheets URL">Google Sheets</a> of someone with access, find the menu option for &#x201C;copy link,&#x201D; and paste it below.</span>
+                        <span id="setup_open_journal_instructions">Open an existing q͜ʘ journal using its URL or Google Sheets ID. Locate the journal in <a href="https://docs.google.com/spreadsheets/u/0/" title="Google Sheets URL">Google Sheets</a>, find the menu option for &#x201C;copy link,&#x201D; and paste it below.</span>
                         <div id="setup_open_journal_line">
                             <label for="ssid">Google Sheets URL:</label>
-                            <input id="ssid" placeholder="Google spreadsheet ID">
-                            <button id="open_journal_btn">open</button>
+                            <input id="ssid" placeholder="will be shortened to ID#">
+                            <button id="open_journal_btn" disabled>open</button>
                         </div>
                         <div id="setup_previous_journals">
                             <label for="open_journal_select">previously opened journals: </label>
@@ -95,13 +96,15 @@
                 <div id="footer_firstline">
                     <span id="last_sync">last synced: n/a </span>
                     <a title="Privacy Policy" href="privacy-policy.html">Privacy Policy</a>
+                    <!--<a title="Support q͜ʘ’s development" href="donate.html">Donate</a>-->
+                    <!--<select id="localization"><option value="en-us">English</option></select>-->
                 </div>
-                <div id="footer_copyright">&copy; 2024 William Baker. Licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may obtain a copy of the License at <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
+                <div id="footer_copyright">&copy; 2024 William Baker. Licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may view a copy of the License <a href="LICENSE.md" title="plain text Apache-2.0 license">here</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
             </div>
         </div>
-        <script src="bha-auth-scripts.js"></script>
+        <script src="bha-auth-scripts.js?1"></script>
         <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoad()"></script>
         <script async defer src="https://accounts.google.com/gsi/client" onload="gisInit()"></script>
-        <script defer src="bha-scripts.js"></script>
+        <script defer src="bha-scripts.js?1"></script>
     </body>
 </html>
