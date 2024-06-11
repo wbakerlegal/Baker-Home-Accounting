@@ -15,14 +15,22 @@
 
 // To-do: 
 
+// include type when adding new account from an entry
 // change doIfStillSynced functions to promise based rather than callback
 // identify the popup blocked error and prompt user
 // make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
 // localization
 /*
-show running balance when viewing A/L/Q in Ledgers
----Force start date to BOY for viewing A/L/Q in Ledgers
----add annual closing and opening entries for A/L/Q accounts to December EOM review
+ CSS change: 
+ change Select element style to use appearance/-moz-appearance/-webkit-appearance: none 
+ (gets rid of gel in safari but also arrows in all browsers) 
+ then add the arrows back with an embedded SVG arrow with a transparent background no-repeat 95% 50% #(background-color); 
+ unfortunately must use the combined "background" CSS property, can't seem to specify image and color separately. So make the embedded SVG small because I'll be using it wherever I want a select with a different background color (e.g. #nav_menu)
+ */
+/*
+Automatically change start date to BOY for A/L/Q, 
+--- show the running balance if an A/L/Q ledger is populated with a Jan 1 start date. Don't show running balance for A/L/Q if start date is not BOY.
+--- add annual closing and opening entries for A/L/Q accounts to December EOM review
 */
 /*
 in journal, button to view/edit rcrg template from rcrg instance?
@@ -1079,10 +1087,16 @@ let addEntryChangeHandler = function(e) {
     if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
         if (e.target.value == '***') {
             if (!isSignedIn(() => {
-                let entry_line = e.target.parentElement.parentElement.parentElement;
-                let div = getNewAcctLine();
+                let acct_row = e.target.parentElement;
+                let entry_line = acct_row.parentElement.parentElement;
+                let type = getEntryInputElements(entry_line).entry_data.type;
+                let side = e.target.classList.contains('deb_acct') ? 'deb' : 'cred';
+                let typecode = type == 'exp' ? side == 'deb' ? 'E' : 'P'
+                             : type == 'inc' ? side == 'deb' ? 'A' : 'R' 
+                             : '';
+                let div = getNewAcctLine({typecodes: typecode});
                 div.classList.add('popunder');
-                entry_line.after(div); 
+                acct_row.after(div); 
             })) {
                 e.target.value = '';
             }
@@ -1275,8 +1289,8 @@ function initializeJournal() {
     fromdate.type = 'date';
     fromdate.id = 'journal_from_date';
     fromdate.value = `${today.getFullYear()}-01-01`;
-    let s = document.createElement('span');
-    s.textContent = ' - ';
+    let s = document.createElement('label');
+    s.textContent = 'to';
     let todate = document.createElement('input');
     todate.type = 'date';
     todate.id = 'journal_to_date';
@@ -2528,6 +2542,7 @@ function getEditAcctLine(acct) {
     }
     let name = mkc('ea_name', 'input');
     name.value = acct.name;
+    name.placeholder = "account name";
     name.name = "edit_acct_name";
     name.size = acct.name.length > 20 ? acct.name.length : 20;
     name.maxLength = '30';
@@ -2605,7 +2620,7 @@ function getEditAcctLine(acct) {
         : acct.typecodes.includes('E') ? 'E' : '', acct.parent);
         let disqualified_parents = getListOfAllSubAccts(acct.name);
         for (const opt of acct_opt_els) {
-            if (!disqualified_parents.includes(opt.value) && acct.typecodes) {
+            if (!disqualified_parents.includes(opt.value) && acct.typecodes && acct.typecodes != 'P') {
                 parent.append(opt);
             }
         }
@@ -3073,8 +3088,16 @@ async function editAcctSaveAcct(edit_acct_line) {
     }
     })    
 }
-function getNewAcctLine() {
-    let div = getEditAcctLine({name:'',typecodes:'',parent:'',budget:'',subs:[]});
+
+function getNewAcctLine(template) {
+    if (!template) template = {name:'',typecodes:'',parent:'',budget:'',subs:[]};
+    if (!template.hasOwnProperty('name')) template.name = '';
+    if (!template.hasOwnProperty('typecodes')) template.typecodes = '';
+    if (!template.hasOwnProperty('parent')) template.parent = '';
+    if (!template.hasOwnProperty('budget')) template.budget = '';
+    if (!template.hasOwnProperty('subs')) template.subs = [];
+    let div = getEditAcctLine(template);
+    div.classList.add('popunder');
     editAcctEditLine(div);
     let els = getEditAcctLineEls(div);
     els.edit_btn.remove();
@@ -3087,6 +3110,7 @@ function getNewAcctLine() {
     els.cancel_btn.classList.add('edit_acct_cancel_new_button');
     return div;
 }
+
 function editAcctCreateNewAcct() {
     isSignedIn(() => {
         let div = getNewAcctLine();
@@ -3100,6 +3124,8 @@ function editAcctCreateNewAcct() {
 
 async function editAcctSaveNewAcct (edit_acct_line) {
     let els = getEditAcctLineEls(edit_acct_line);
+    let entryAcctToFill = false;
+    if (edit_acct_line.previousElementSibling.classList.contains('entry_acct')) entryAcctToFill = edit_acct_line.previousElementSibling;
     let values = {
         name: els.name.value ? els.name.value : '',
         typecodes: '',
@@ -3130,19 +3156,6 @@ async function editAcctSaveNewAcct (edit_acct_line) {
     if (errors) {
         flash(errors);
     } else {
-        /* insertDimensionRequest
-        {insertDimension:  {
-            "range": {
-                //object (DimensionRange)
-                "sheetId": integer,
-                "dimension": enum (Dimension), 'ROWS'|'COLUMNS'
-                "startIndex": integer,
-                "endIndex": integer
-            },
-            "inheritFromBefore": true|false
-        }
-        then do 
-        */
         let sheetId;
         for (const sheet of ssprops.sheets) {
             if (sheet.properties.title == 'Account List') {
@@ -3183,13 +3196,27 @@ async function editAcctSaveNewAcct (edit_acct_line) {
                     await bha_sync();
                     edit_acct_line.remove();
                     populateEditAccts();
-                    let entriesToUpdate = document.getElementsByClassName('entry'); // sometimes we save a new acct while creating a journal entry
+                    let entriesToUpdate = document.getElementsByClassName('entry');
                     for (const entry_line of entriesToUpdate) {
                         let type = JSON.parse(entry_line.dataset.origentry).type ? JSON.parse(entry_line.dataset.origentry).type : '';
                         updateEntryOpts(entry_line, type);
                     }
+                    if (entryAcctToFill !== false) {
+                        for (const child of entryAcctToFill.children) {
+                            if (child.classList.contains('deb_acct') || child.classList.contains('cred_acct')) {
+                                let newAcctInOptions;
+                                for (const opt of child.children) {
+                                    if (opt.value == values.name) newAcctInOptions = true;
+                                }
+                                if (newAcctInOptions === true) {
+                                    child.value = values.name;
+                                }
+                            }
+                        }
+                    }
                 }
             )
+            
         } catch(err) {
             flash(err.message);
             return;
@@ -3328,7 +3355,12 @@ function editAcctDeleteAcct(edit_acct_line) {
             deleteRows('Account List', index, index + 1, async function() {
                 await bha_sync();
                 flash(`Account ${name} deleted.`);
-                populateEditAccts();                    
+                populateEditAccts();
+                let entriesToUpdate = document.getElementsByClassName('entry');
+                for (const entry_line of entriesToUpdate) {
+                    let type = JSON.parse(entry_line.dataset.origentry).type ? JSON.parse(entry_line.dataset.origentry).type : '';
+                    updateEntryOpts(entry_line, type);
+                }                  
             })
         }
     })
@@ -3552,7 +3584,7 @@ function initializeLedgers() {
     from_date_input.id = 'ledger_from_date';
     from_date_input.type = 'date';
     from_date_input.value = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-01`;
-    let date_label = document.createElement('span');
+    let date_label = document.createElement('label');
     date_label.textContent = 'to';
     let to_date_input = document.createElement('input');
     to_date_input.id = 'ledger_to_date';
