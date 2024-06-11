@@ -448,6 +448,16 @@ input.required, select.required {
     margin-left: 1rem;
 }
 
+@keyframes popunder {
+    from {background-color: #DAEDF7;}
+    to {background-color: #fff;}
+}
+
+.popunder {
+    animation-name: popunder;
+    animation-duration: 3s;
+}
+
 @media only screen and (max-width: 650px) {
     body {
       width: 100%;

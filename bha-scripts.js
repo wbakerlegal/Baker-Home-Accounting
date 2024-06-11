@@ -17,6 +17,7 @@
 
 // change doIfStillSynced functions to promise based rather than callback
 // identify the popup blocked error and prompt user
+// make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
 // localization
 /*
 show running balance when viewing A/L/Q in Ledgers
@@ -306,71 +307,6 @@ let navbarChangeHandler = function(e) {
 }
 
 // END navbar control BEGIN Add Journal Entry
-function updateEntryOpts(entry_line, _type) {
-    let type = _type ? _type : '';
-    let els = getEntryInputElements(entry_line);
-    let entry_data = els.entry_data;
-    entry_data.type = type;
-    entry_line.dataset.origentry = JSON.stringify(entry_data);
-    for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
-        const select = i < els.deb_accts.length ? els.deb_accts[i] : els.cred_accts[i - els.deb_accts.length];
-        const side =  i < els.deb_accts.length ? 'deb' : 'cred';
-        const acct_name = i < els.deb_accts.length ? entry_data.hasOwnProperty('deb_accts') ? entry_data.deb_accts[i] : '' : entry_data.hasOwnProperty('cred_accts') ? entry_data.cred_accts[i - els.deb_accts.length] : '';
-        while (select.firstChild) {
-            select.firstChild.remove();
-        }
-        let first_opt = document.createElement('option');
-        first_opt.value = '';
-        let options = [];
-        if (type == 'exp') {
-            first_opt.textContent = side == 'deb' ? 'expense category...' : 'from account...';
-            options = getAcctOptEls(side == 'deb' ? 'E' : 'P', acct_name);
-        } else if (type == 'inc') {
-            first_opt.textContent = side == 'deb' ? 'into account...' : 'income source...';
-            options = getAcctOptEls(side == 'deb' ? 'A' : 'R', acct_name);
-        } else if (type == 'tfr') {
-            first_opt.textContent = side == 'deb' ? 'into account...' : 'from account...';
-            options = getAcctOptEls('A', acct_name);
-            for (const opt of getAcctOptEls('L', acct_name)) {
-                options.push(opt);
-            }
-        } else {
-            first_opt.textContent = side == 'deb' ? 'account to debit...' : 'account to credit...';
-            options = getAcctOptEls('', acct_name);
-        }
-        let newacct = mk('option');
-        newacct.textContent = '(add new...)';
-        newacct.value = '***';
-        select.append(first_opt, newacct);
-        for (const opt of options) {
-            select.append(opt);
-        }
-    }
-    if (type == 'exp') {
-        els.exp.classList.add('active_type');
-        els.inc.classList.remove('active_type');
-        els.tfr.classList.remove('active_type');
-        els.gen.classList.remove('active_type');
-    }
-    if (type == 'inc') {
-        els.exp.classList.remove('active_type');
-        els.inc.classList.add('active_type');
-        els.tfr.classList.remove('active_type');
-        els.gen.classList.remove('active_type');
-    }
-    if (type == 'tfr') {
-        els.exp.classList.remove('active_type');
-        els.inc.classList.remove('active_type');
-        els.tfr.classList.add('active_type');
-        els.gen.classList.remove('active_type');
-    }
-    if (type == '') {
-        els.exp.classList.remove('active_type');
-        els.inc.classList.remove('active_type');
-        els.tfr.classList.remove('active_type');
-        els.gen.classList.add('active_type');
-    }
-}
 
 function newBlankEntry(type) {
     const target = document.getElementById('add_entry');
@@ -784,6 +720,78 @@ function subValidateAcctNames(els, errorsArr, quiet) {
     }
 }
 
+function updateEntryOpts(entry_line, _type) {
+    let type = _type ? _type : '';
+    let els = getEntryInputElements(entry_line);
+    let entry_data = els.entry_data;
+    entry_data.type = type;
+    entry_line.dataset.origentry = JSON.stringify(entry_data);
+    for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
+        const select = i < els.deb_accts.length ? els.deb_accts[i] : els.cred_accts[i - els.deb_accts.length];
+        const prevSelectedValue = select.value;
+        const origValue = i < els.deb_accts.length ? entry_data.hasOwnProperty('deb_accts') ? entry_data.deb_accts[i] : '' : entry_data.hasOwnProperty('cred_accts') ? entry_data.cred_accts[i - els.deb_accts.length] : '';
+        const side =  i < els.deb_accts.length ? 'deb' : 'cred';
+        while (select.firstChild) {
+            select.firstChild.remove();
+        }
+        let first_opt = document.createElement('option');
+        first_opt.value = '';
+        let options = [];
+        if (type == 'exp') {
+            first_opt.textContent = side == 'deb' ? 'expense category...' : 'from account...';
+            options = getAcctOptEls(side == 'deb' ? 'E' : 'P');
+        } else if (type == 'inc') {
+            first_opt.textContent = side == 'deb' ? 'into account...' : 'income source...';
+            options = getAcctOptEls(side == 'deb' ? 'A' : 'R');
+        } else if (type == 'tfr') {
+            first_opt.textContent = side == 'deb' ? 'into account...' : 'from account...';
+            options = getAcctOptEls('A');
+            for (const opt of getAcctOptEls('L')) {
+                options.push(opt);
+            }
+        } else {
+            first_opt.textContent = side == 'deb' ? 'account to debit...' : 'account to credit...';
+            options = getAcctOptEls('');
+        }
+        let newacct = mk('option');
+        newacct.textContent = '(add new...)';
+        newacct.value = '***';
+        select.append(first_opt, newacct);
+        let prevValueInOptions;
+        let origValueInOptions;
+        for (const opt of options) {
+            select.append(opt);
+            if (opt.value == prevSelectedValue) prevValueInOptions = prevSelectedValue;
+            if (opt.value == origValue) origValueInOptions = origValue;
+        }
+        select.value = prevValueInOptions ? prevValueInOptions : origValueInOptions ? origValueInOptions : '';
+    }
+    if (type == 'exp') {
+        els.exp.classList.add('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == 'inc') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.add('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == 'tfr') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.add('active_type');
+        els.gen.classList.remove('active_type');
+    }
+    if (type == '') {
+        els.exp.classList.remove('active_type');
+        els.inc.classList.remove('active_type');
+        els.tfr.classList.remove('active_type');
+        els.gen.classList.add('active_type');
+    }
+}
+
 function entryAmtAutoComplete(els) {
     if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
@@ -1073,6 +1081,7 @@ let addEntryChangeHandler = function(e) {
             if (!isSignedIn(() => {
                 let entry_line = e.target.parentElement.parentElement.parentElement;
                 let div = getNewAcctLine();
+                div.classList.add('popunder');
                 entry_line.after(div); 
             })) {
                 e.target.value = '';
@@ -1087,7 +1096,7 @@ let addEntryFocusHandler = function(e) {
     }
 }
 
-// END  Add Journal Entry BEGIN Edit Journal Entry & recurring entries
+// END  Add Journal Entry BEGIN Edit Journal Entry
 
 function processJournal(raw, startingSSRowIndex1) {
     /* returns [{
@@ -1451,6 +1460,7 @@ function mkRcrg(entry_line) {
             template.cred_amts.push(els.cred_amts[i].value);
         }
         let div = getRcrgLine(template);
+        div.classList.add('popunder');
         let templateEls = getRcrgLineEls(div);
         editRcrg(div);
         templateEls.cancel.classList.remove('cancel_rcrg');
@@ -2107,6 +2117,7 @@ function createRcrg(type) {
             type: type,
             index: newIndex
         });
+        div.classList.add('popunder');
         let els = getRcrgLineEls(div);
         editRcrg(div);
         els.cancel.classList.remove('cancel_rcrg');
@@ -2385,6 +2396,7 @@ function instRcrgEntry(entry_line) {
         template.cred_amts.push(els.cred_amts[i].value);
     }
     let div = getEntryInputLine(template);
+    div.classList.add('popunder');
     let dels = getEntryInputElements(div);
     dels.cancel.classList.remove('cancel_entry');
     dels.cancel.classList.add('cancel_new_entry');
