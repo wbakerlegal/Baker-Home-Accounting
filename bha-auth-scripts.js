@@ -55,15 +55,17 @@ function gisInit() {
 async function handleConnectClick() {
   if (isSignedIn()) {
     await bha_sync();
-  }
-  tokenClient.callback = async (resp) => {
-    if (resp.error !== undefined) {
-      throw(resp);
-    }
-    await justGotToken();
     resetViewsAfterSync();
+  } else {
+    tokenClient.callback = async (resp) => {
+      if (resp.error !== undefined) {
+        throw(resp);
+      }
+      await justGotToken();
+      resetViewsAfterSync();
+    }
+    tokenClient.requestAccessToken();
   }
-  tokenClient.requestAccessToken();
 }
 
 function revokeToken() {

@@ -15,18 +15,11 @@
 
 // To-do: 
 
-// include type when adding new account from an entry
 // change doIfStillSynced functions to promise based rather than callback
 // identify the popup blocked error and prompt user
 // make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
+
 // localization
-/*
- CSS change: 
- change Select element style to use appearance/-moz-appearance/-webkit-appearance: none 
- (gets rid of gel in safari but also arrows in all browsers) 
- then add the arrows back with an embedded SVG arrow with a transparent background no-repeat 95% 50% #(background-color); 
- unfortunately must use the combined "background" CSS property, can't seem to specify image and color separately. So make the embedded SVG small because I'll be using it wherever I want a select with a different background color (e.g. #nav_menu)
- */
 /*
 Automatically change start date to BOY for A/L/Q, 
 --- show the running balance if an A/L/Q ledger is populated with a Jan 1 start date. Don't show running balance for A/L/Q if start date is not BOY.
@@ -1242,7 +1235,7 @@ function getJournalEntriesByDate(fromDate, toDate) {
                 for (const e of entries) entryList.push(e);
                 fetched = [];
             }
-            fetchedStartingSSRow = i + 2;
+            fetchedStartingSSRow = i + 3; // +1 for index 1, +1 because the header row isn't in the journal array, and +1 because we're setting it for the next iteration
         }
         if (i == journal.length - 1) {
             if (fetched.length > 0) {
@@ -3156,6 +3149,18 @@ async function editAcctSaveNewAcct (edit_acct_line) {
     if (errors) {
         flash(errors);
     } else {
+        /* insertDimensionRequest
+        {insertDimension:  {
+            "range": {
+                //object (DimensionRange)
+                "sheetId": integer,
+                "dimension": enum (Dimension), 'ROWS'|'COLUMNS'
+                "startIndex": integer,
+                "endIndex": integer
+            },
+            "inheritFromBefore": true|false
+        }
+        */
         let sheetId;
         for (const sheet of ssprops.sheets) {
             if (sheet.properties.title == 'Account List') {

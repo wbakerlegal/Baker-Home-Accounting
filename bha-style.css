@@ -272,7 +272,7 @@ select {
     flex: 1 1 auto;
 }
 .desc {
-    flex: 0 0 60%;
+    flex: 0 0 62%;
     box-sizing: border-box;
     margin-right: 0.25rem;
 }
@@ -298,7 +298,7 @@ select {
     margin: 0 0 .5rem;
 }
 .deb_acct, .cred_acct {
-    flex: 0 1 60%;
+    flex: 0 1 62%;
     margin-right: 0.25rem;
 }
 .type_container .add_deb_acct:hover:not(:disabled), .type_container  .add_cred_acct:hover:not(:disabled),  .type_container  .split_entry:hover:not(:disabled) {
