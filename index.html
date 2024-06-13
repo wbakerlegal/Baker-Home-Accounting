@@ -23,20 +23,20 @@
                 <span class="fakea" id="disconnect_btn" onclick="revokeToken()">disconnect</span>
             </span>
         </div>
-        <div id="content">
-            <div id="navbar">
-                <select id="nav_menu" name="nav_menu" disabled>
-                    <option value="add_entry">Add entry</option>
-                    <option value="ledgers">Ledgers</option>
-                    <option value="journal">Journal</option>
-                    <option value="eom_rev">Monthly Review</option>
-                    <option value="rcrg">Recurring items</option>
-                    <option value="edit_accts">Edit Accounts</option>
-                    <option selected value="setup">General Setup</option>
-                </select>
-                <div id="navbar_buttons">
-                </div>
+        <div id="navbar">
+            <select id="nav_menu" name="nav_menu" disabled>
+                <option value="add_entry">Add entry</option>
+                <option value="ledgers">Ledgers</option>
+                <option value="journal">Journal</option>
+                <option value="eom_rev">Monthly Review</option>
+                <option value="rcrg">Recurring items</option>
+                <option value="edit_accts">Edit Accounts</option>
+                <option selected value="setup">General Setup</option>
+            </select>
+            <div id="navbar_buttons">
             </div>
+        </div>
+        <div id="content">
             <div id="add_entry" class="main"></div>
             <div id="ledgers" class="main">
                 <nav>
@@ -54,7 +54,7 @@
             <div id="rcrg" class="main"></div>
             <div id="edit_accts" class="main"></div>        
             <div id="setup" class="main">
-                <div id="setup_signin_instructions">First, sign in with your Google account using the link at the top.</div>
+                <div id="setup_signin_instructions">First, <span class="fakea" onclick="handleConnectClick()">sign in</span> with your Google account.</div>
                 <div id="setup_journal_name">
                     <label for="journal_name">Journal title:</label>
                     <input id="journal_name" disabled>

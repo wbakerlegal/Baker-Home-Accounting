@@ -15,13 +15,15 @@
 
 // To-do: 
 
-// change doIfStillSynced functions to promise based rather than callback
+// repopulate prevSSIDs when opening or creating a journal
+// change doIf_StillSynced and batchUpdateValues functions to promise based rather than callback
 // identify the popup blocked error and prompt user
 // make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
 
 // localization
 /*
-Automatically change start date to BOY for A/L/Q, 
+In ledgers:
+--- visual indication for sub-accounts
 --- show the running balance if an A/L/Q ledger is populated with a Jan 1 start date. Don't show running balance for A/L/Q if start date is not BOY.
 --- add annual closing and opening entries for A/L/Q accounts to December EOM review
 */
@@ -60,9 +62,25 @@ if (localStorage.getItem('spreadsheet_properties')) ssprops = JSON.parse(localSt
 let accts = localStorage.getItem('account_list') ? JSON.parse(localStorage.getItem('account_list')) : [];
 
 //let journal; 
+//let tokenExpirationInMS;
 // FOR DEVELOPMENT ONLY:
-let journal = localStorage.getItem('journal') ? JSON.parse(localStorage.getItem('journal')) : []; 
-let tokenExpirationInMS = localStorage.getItem('gapiTokenExp') ? parseInt(localStorage.getItem('gapiTokenExp')) : '';
+let journal = localStorage.getItem('journal') ? JSON.parse(localStorage.getItem('journal')) : []; // this might get too big
+
+let tokenExpirationInMS = localStorage.getItem('gapiTokenExp') ? parseInt(localStorage.getItem('gapiTokenExp')) : 0; // this might break their rules. Can i keep the hourlong token in localStorage? If not, can I do it if I add a "keep my signed in" option that is unchecked by default?
+
+function checkLocalStorageSize() { // to test how big the journal gets
+    let _lsTotal = 0;
+    for (const _x in localStorage) {
+        if (!localStorage.hasOwnProperty(_x)) {
+            continue;
+        }
+        const _xLen = ((localStorage[_x].length + _x.length) * 2);
+        _lsTotal += _xLen;
+        console.log(_x.substring(0, 50) + " = " + (_xLen / 1024).toFixed(2) + " KB")
+    }
+    console.log("Total = " + (_lsTotal / 1024).toFixed(2) + " KB");
+} 
+
 // END FOR DEVELOPMENT ONLY
 
 let rcrgs = localStorage.getItem('rcrgs') ? JSON.parse(localStorage.getItem('rcrgs')) : [];
@@ -81,17 +99,9 @@ function insertCommas(float) {
     return f;
 }
 
-/*
-module format:
-create objects from spreadsheet data
-modular dom generation
-initialize/populate
-create objects of dom elements
-user interface/view handlers
-user command handlers, validation
-user command handlers updating spreadsheet
-event dispatchers
-*/
+function getDaysInMonth(m, y) { // m is index 0
+    return m == 3 || m == 5 || m == 8 || m == 10 ? 30 : m == 1 && y%4 != 0 ? 28 : m == 1 && y%400 == 0 ? 29 : m == 1 && y%100 == 0 ? 28 : m == 1 ? 29 : 31;
+}
 
 // spreadsheet write functions
 function batchUpdateValues(ranges, values, callback) {
@@ -230,6 +240,18 @@ async function insertRows(sheetName, startIndex0, endIndex0) {
             sheetId = sheet.properties.sheetId;
         }
     }
+    /* insertDimensionRequest
+        {insertDimension:  {
+            "range": {
+                //object (DimensionRange)
+                "sheetId": integer,
+                "dimension": enum (Dimension), 'ROWS'|'COLUMNS'
+                "startIndex": integer,
+                "endIndex": integer
+            },
+            "inheritFromBefore": true|false
+        }
+        */
     let response;
     try {
         response = await gapi.client.sheets.spreadsheets.batchUpdate({
@@ -280,6 +302,18 @@ function mkc(_class, _element) { // mk= make; c = by class name
     el.classList.add(_class);
     return el;
 }
+
+/*
+module format:
+create objects from spreadsheet data
+modular dom generation
+initialize/populate
+create objects of dom elements
+user interface/view handlers
+user command handlers, validation
+user command handlers updating spreadsheet
+event dispatchers
+*/
 
 // BEGIN navbar control
 function goToPage(page) {
@@ -1311,7 +1345,7 @@ async function doIfEntryStillSynced(entry_line, callback) { // calling function 
     try {
         database_response = await gapi.client.sheets.spreadsheets.values.batchGet({
             spreadsheetId: ssid,
-            ranges: [`Journal!A${start_row}:E${end_row}`]
+            ranges: [`Journal!A${start_row}:E${end_row + 1}`] // we are pulling one extra line. If the live entry has gained an additional account, only pulling the number of accounts from the local entry would not find that. However, if we pull one more row and it has the same date and description, the total number of accounts won't match in the processed entries below. If the entries are still synced, the extra row is ignored by only looking at the first processed entry below.
         });
     } catch(err) {
         flash('Error');
@@ -1642,10 +1676,11 @@ function processRcrgs(raw, startingSSRowIndex1) {
     return returned;
 }
 
+
 function getRcrgDaysUntilExpected(rcrg_type, rcrg_period, rcrg_qty, days_since_last) {
     /*
     rcrg_type = on|every
-    rcrg_period = day (can't if rcrg_type=='on')|week|month|year (can't if rcrg_type=='every')
+    rcrg_period = day (can't if rcrg_type=='on')| week | month | year (can't if rcrg_type=='every')
     rcrg_qty = int
     days_since_last = int
     */
@@ -1659,11 +1694,15 @@ function getRcrgDaysUntilExpected(rcrg_type, rcrg_period, rcrg_qty, days_since_l
         } else if (rcrg_period == 'week') {
             expectDate = new Date(lastDate.getTime() + (rcrg_qty * 7 * 24 * 60 * 60 * 1000));
         } else if (rcrg_period == 'month') {
-            expectDate = new Date(
-                lastDate.getFullYear(), 
-                lastDate.getMonth() + rcrg_qty, 
-                lastDate.getDate()
-            );
+            const lastDateYear = lastDate.getDate() < 28  ? lastDate.getFullYear() : lastDate.getFullYear() + Math.floor((lastDate.getMonth() + 1)/12);
+            const lastDateMonth = lastDate.getDate() < 28 ? lastDate.getMonth() : (lastDate.getMonth() + 1)%12;
+            let daysToAdd = 0;
+            for (let i = 0; i < rcrg_qty; i++) {
+                const y = lastDateYear + Math.floor((lastDateMonth + i)/12)
+                const m = (lastDateMonth + i)%12;
+                daysToAdd += getDaysInMonth(m, y);
+            }
+            expectDate = new Date(lastDate.getTime() + (daysToAdd * 86400000));
         }
     } else if (rcrg_type == 'on') {
         if (rcrg_period == 'week') {
@@ -1672,14 +1711,16 @@ function getRcrgDaysUntilExpected(rcrg_type, rcrg_period, rcrg_qty, days_since_l
             let beginExpectedPeriod = new Date(lastPlusOnePeriod.getTime() - (daysIntoExpectedPeriod * 24 * 60 * 60 * 1000));
             expectDate = new Date(beginExpectedPeriod.getTime() + (rcrg_qty * 24 * 60 * 60 * 1000));
         } else if (rcrg_period == 'month') {
-            let lastPlusOnePeriod = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
-            expectDate = new Date(lastPlusOnePeriod.getFullYear(), lastPlusOnePeriod.getMonth(), rcrg_qty);
+            const lastDateYear = lastDate.getDate() < 28  ? lastDate.getFullYear() : lastDate.getFullYear() + Math.floor((lastDate.getMonth() + 1)/12);
+            const lastDateMonth = lastDate.getDate() < 28 ? lastDate.getMonth() : (lastDate.getMonth() + 1)%12;
+            let lastPlusOnePeriod = new Date(lastDate.getTime() + (getDaysInMonth(lastDateMonth, lastDateYear) * 86400000));
+            expectDate = new Date(lastPlusOnePeriod.getTime() - (lastPlusOnePeriod.getDate() * 86400000) + (rcrg_qty * 86400000));
         } else if (rcrg_period == 'year') {
             let lastPlusOnePeriod = new Date(lastDate.getFullYear() + 1, lastDate.getMonth(), lastDate.getDate());
             expectDate = new Date(lastPlusOnePeriod.getFullYear(), 0, rcrg_qty) 
         }
     }
-    return Math.floor((expectDate.getTime() - today.getTime()) / 86400000) + 1;
+    return Math.floor((expectDate.getTime() - today.getTime()) / 86400000);
 }
 
 function initializeRcrg() {
@@ -2205,7 +2246,7 @@ async function doIfRcrgStillSynced(rcrg_line, callback) { // calling function wi
     try {
         database_response = await gapi.client.sheets.spreadsheets.values.batchGet({
             spreadsheetId: ssid,
-            ranges: [`Recurring Entries!A${start_row}:G${end_row}`]
+            ranges: [`Recurring Entries!A${start_row}:G${end_row + 1}`] // we are pulling one extra line. Pulling only the number of accounts from the local entry would not find out if the live entry has gained one or more additional accounts. However, if we pull one more row and it has the same rcrtype, qty, period, and desc, the total number of accounts won't match in the processed entries below. If the entries are still synced, the extra row is ignored by only looking at the first processed entry below.
         });
     } catch(err) {
         flash('Error');
@@ -2540,7 +2581,6 @@ function getEditAcctLine(acct) {
     name.size = acct.name.length > 20 ? acct.name.length : 20;
     name.maxLength = '30';
     name.disabled = true;
-    name.required = true;
     name_and_buttons.append(arrow, name);
     div.append(name_and_buttons);
     if (acct.name != 'Assets' && acct.name != 'Liabilities' && acct.name != 'Equity' && acct.name != 'Revenue' && acct.name != 'Expenses') {
@@ -2717,10 +2757,10 @@ function populateEditAccts() {
 }
 
 function initializeEditAccts() {
-    let add_acct_btn = mkc('edit_accts_add_acct_btn', 'button');
+    let add_acct_btn = mk('button');
     add_acct_btn.textContent = 'Create new account';
+    add_acct_btn.onclick = editAcctCreateNewAcct;
     document.getElementById('navbar_buttons').append(add_acct_btn);
-
     populateEditAccts();
 }
 
@@ -2753,15 +2793,8 @@ function getEditAcctLineEls(edit_acct_line) {
             hasSubs:boolean,
         }
     */
-    let els = {};
+    let els = {orig: JSON.parse(edit_acct_line.dataset.orig)};
 
-    origdata = JSON.parse(edit_acct_line.dataset.orig);
-    els.orig = {
-        name: origdata.name,
-        typecodes: origdata.typecodes,
-        parent: origdata.parent,
-        budget: origdata.budget,
-    }
 
     function checkChildren(parent) {
         for (const child of parent.children) {
@@ -2913,38 +2946,31 @@ function editAcctCancelEdit(edit_acct_line) {
 
 async function editAcctSaveAcct(edit_acct_line) {
     isSignedIn(async () => {
-        let els = getEditAcctLineEls(edit_acct_line);
-    let values = {
-        name: els.name.value ? els.name.value : '',
-        typecodes: '',
-        parent_acct: els.parent.value ? els.parent.value : '',
-        budget: '',
-    }
-    let errors = '';
-    values.typecodes += els.type.value;
-    if (!values.typecodes) {
-        errors += 'Type is required. ';
-    } else if ((values.typecodes.includes('A') || values.typecodes.includes('L')) && els.pmt.checked) {
-        values.typecodes += 'P';
-    } else if ((values.typecodes.includes('R') || values.typecodes.includes('E')) && els.budget_chk.checked) {
-        values.typecodes += 'B';
-        values.budget = els.budget_amt.value ? els.budget_amt.value : '';
-        if (els.budget_exp.value) {
-            values.typecodes += els.budget_exp.value;
-        } else if (values.typecodes.includes('E')) {
-            errors += 'Expense budgeting type is required. ';
+        let values;
+        try {
+            let response = await gapi.client.sheets.spreadsheets.values.batchGet({
+                spreadsheetId: ssid,
+                ranges: ['Account List!A2:D', 'Journal!A2:E']
+            });
+            let liveAccts = response.result.valueRanges[0].values;
+            journal = response.result.valueRanges[1].values;
+            let sameLength = accts.length == liveAccts.length;
+            let acctNamesMatch = true;
+            for (let i = 0; i > liveAccts.length; i++) {
+                if (liveAccts[i][0] != accts[i][0]) acctNamesMatch = false;
+            }
+            if (sameLength == false || acctNamesMatch == false) {
+                accts = liveAccts;
+                populateEditAccts();
+                throw new Error('Account list has become unsynced. Please try again.')
+            }
+            values = editAcctValidateLine(edit_acct_line);
+        } catch(err) {
+            flash(err.message);
+            console.log(err);
+            return;
         }
-    }
-    if (!values.name) {
-        errors += 'Name is required. ';
-    }
-    if (!values.parent_acct) {
-        errors += 'Parent is required. ';
-    }
-    if (errors) {
-        flash(errors);
-        return;
-    } else {
+        let els = getEditAcctLineEls(edit_acct_line);
         let nameChanged = false;
         let merging = false;
         if (values.name != els.orig.name) {
@@ -2962,123 +2988,82 @@ async function editAcctSaveAcct(edit_acct_line) {
         if (nameChanged || typecodeChanged || parentChanged || budgetChanged) {
             let ssranges = [];
             let ssvalues = [];
-            let accts_row_no;
+            let newRow = [
+                values.name,
+                values.typecodes,
+                values.parent_acct,
+                values.budget
+            ]
+            let origAcctsIndex;
             for (let i = 0; i < accts.length; i++) {
                 if (accts[i][0] == els.orig.name) {
-                    accts_row_no = i + 2;
+                    origAcctsIndex = i;
+                }
+            }
+            if (merging && confirm(`This will irreversibly merge ${els.orig.name} into ${values.name}. Proceed with extreme caution.`)) {
+                for (const row of accts) {
+                    if (row[2] == els.orig.name) row[2] = values.name;
+                }
+                ssranges.push('Account List!A2');
+                ssvalues.push([...accts.toSpliced(origAcctsIndex, 1), ['','','','']]);
+            }
+            if (!merging) {
+                if (parentChanged) {
+                    accts.splice(origAcctsIndex, 1);
+                    let destinationIndex;
+                    let subsToSkip = [];
+                    for (let i = 0; i < accts.length; i++) {
+                        if (accts[i][0] == values.parent_acct || subsToSkip.includes(accts[i][2])) {
+                            subsToSkip.push(accts[i][0]);
+                            destinationIndex = i + 1;
+                        }
+                    }
+                    accts.splice(destinationIndex, 0, newRow);
+                    if (nameChanged) {
+                        for (const row of accts) {
+                            if (row[2] == els.orig.name) row[2] = values.name;
+                        }
+                    }
+                    organizeSubAccts(values.name);
+                    ssranges.push('Account List!A2');
+                    ssvalues.push(accts);
+                } else { // the account name, typecodes, or budget has changed, the parent has not changed, and we are not merging
+                    ssranges.push(`Account List!A${origAcctsIndex + 2}`); // +1 for header row, +1 for index 1
+                    ssvalues.push([newRow]);
                 }
             }
             if (nameChanged) {
-                ssranges.push(`Account List!A${accts_row_no}`);
-                ssvalues.push([[values.name]]);
-                if (!merging || (merging && confirm(`This will irreversibly merge ${els.orig.name} into ${values.name}. Proceed with extreme caution.`))) {
-                    // change the journal. There will be a live journal becaues we're signed in. But maybe we want to edit the spreadsheet directly then resync.
-                    let entries_to_update = [];
-                    for (let i = 0; i < journal.length; i++) {
-                        let row = journal[i];
-                        if (row[2] == els.orig.name) {
-                            entries_to_update.push(i + 2)
-                        }
-                    }
-                    for (const row_no of entries_to_update) {
-                        ssranges.push(`Journal!C${row_no}`);
-                        ssvalues.push([[values.name]]);
-                    }
-                    // change the parent entry for all sub accounts
-                    let parents_to_update = [];
-                    for (let i = 0; i < accts.length; i++) {
-                        if (accts[i][0] == values.name) {
-                            ssranges.push(`Account List!A${i + 2}`);
-                            ssvalues.push([[values.name]]);
-                        }
-                        if (accts[i][2] == els.orig.name) {
-                            parents_to_update.push(i + 2);
-                        }
-                    }
-                    for (const row_no of parents_to_update) {
-                        ssranges.push(`Account List!C${row_no}`);
-                        ssvalues.push([[values.name]]);
-                    }
-                    // change recurring entries 
-                    let rcrgs_to_update = [];
-                    for (let i = 0; i < rcrgs.length; i++) {
-                        let row = rcrgs[i];
-                        if (row[4] == els.orig.name) {
-                            rcrgs_to_update.push(i + 2);
-                        }
-                    }
-                    for (const row_no of rcrgs_to_update) {
-                        ssranges.push(`Recurring Entries!E${row_no}`);
-                        ssvalues.push([[values.name]]);
+                let entries_to_update = [];
+                for (let i = 0; i < journal.length; i++) {
+                    let row = journal[i];
+                    if (row[2] == els.orig.name) {
+                        entries_to_update.push(i + 2)
                     }
                 }
+                for (const row_no of entries_to_update) {
+                    ssranges.push(`Journal!C${row_no}`);
+                    ssvalues.push([[values.name]]);
+                }
+                let rcrgs_to_update = [];
+                for (let i = 0; i < rcrgs.length; i++) {
+                    let row = rcrgs[i];
+                    if (row[4] == els.orig.name) {
+                        rcrgs_to_update.push(i + 2);
+                    }
+                }
+                for (const row_no of rcrgs_to_update) {
+                    ssranges.push(`Recurring Entries!E${row_no}`);
+                    ssvalues.push([[values.name]]);
+                }
             }
-            if (typecodeChanged) {
-                ssranges.push(`Account List!B${accts_row_no}`);
-                ssvalues.push([[values.typecodes]]);
-            }
-            if (budgetChanged) {
-                ssranges.push(`Account List!D${accts_row_no}`);
-                ssvalues.push([[values.budget]]);
-            }
-            if (parentChanged) {
-                ssranges.push(`Account List!C${accts_row_no}`);
-                ssvalues.push([[values.parent_acct]]);
-            }
-
             let valuesUpdated = async function() {
-                flash(`${ssvalues.length} values updated.`);
-                if (parentChanged) {
-                    let startIndex;
-                    let destinationIndex;
-                    let sheetId;
-                    for (let i = 0; i < accts.length; i++) {
-                        if (accts[i][0] == els.orig.name) {
-                            startIndex = i + 1; // index 0 so just add 1 for the header row
-                        }
-                        if (accts[i][0] == values.parent_acct) {
-                            destinationIndex = i + 2; // index 0 + 1 for header row + 1 to come after the parent row
-                        }
-                    }
-                    for (const sheet of ssprops.sheets) {
-                        if (sheet.properties.title == 'Account List') {
-                            sheetId = sheet.properties.sheetId;
-                        }
-                    }
-                    let response;
-                    try {
-                        response = await gapi.client.sheets.spreadsheets.batchUpdate({
-                            spreadsheetId: ssid,
-                            requests: [{
-                                moveDimension: {
-                                    source: {
-                                        sheetId: sheetId,
-                                        dimension: 'ROWS',
-                                        startIndex: startIndex,
-                                        endIndex: startIndex + 1
-                                    },
-                                    destinationIndex: destinationIndex
-                                }
-                            }]
-                        })
-                    } catch (err) {
-                        flash(err.message);
-                        return;
-                    }
-                    if (!response) {
-                        flash('Nope');
-                        return;
-                    }
-                }
+                flash('Account updated.');
                 await bha_sync();
-                while (document.getElementById('navbar_buttons').firstChild) {
-                    document.getElementById('navbar_buttons').firstChild.remove();
-                }
-                initializeEditAccts();
+                resetViewsAfterSync();
             }
             batchUpdateValues(ssranges, ssvalues, valuesUpdated);
         }
-    }
+        
     })    
 }
 
@@ -3115,10 +3100,77 @@ function editAcctCreateNewAcct() {
     })
 }
 
-async function editAcctSaveNewAcct (edit_acct_line) {
+async function editAcctSaveNewAcct(edit_acct_line) {
+    isSignedIn(async () => {
+        let values;
+        try {
+            await acctsStillSynced();
+            values = editAcctValidateLine(edit_acct_line);
+            for (const row of accts) {
+                if (row[0] == values.name) {
+                    throw new Error('Account name already exists.');
+                } 
+            }
+        } catch(err) {
+            flash(err.message);
+            console.log(err);
+            return;
+        }
+        let entryAcctToFill = false;
+        if (edit_acct_line.previousElementSibling && edit_acct_line.previousElementSibling.classList.contains('entry_acct')) entryAcctToFill = edit_acct_line.previousElementSibling;
+        let destinationIndex;
+        let subsToSkip = [];
+        for (let i = 0; i < accts.length; i++) {
+            if (accts[i][0] == values.parent_acct || subsToSkip.includes(accts[i][2])) {
+                subsToSkip.push(accts[i][0]);
+                destinationIndex = i + 2; // +1 for header, +1 to put after
+            }
+        }
+        console.log(subsToSkip, destinationIndex)
+        try {
+            await insertRows('Account List', destinationIndex, destinationIndex + 1);
+            batchUpdateValues(
+                [`Account List!A${destinationIndex + 1}`],
+                [[[
+                    values.name,
+                    values.typecodes,
+                    values.parent_acct,
+                    values.budget
+                ]]],
+                async function() {
+                    await bha_sync();
+                    edit_acct_line.remove(); // if we're adding an account from somewhere other than the Edit Accounts pane
+                    populateEditAccts();
+                    let entryInputsToUpdate = document.getElementsByClassName('entry');
+                    for (const entry_line of entryInputsToUpdate) {
+                        let type = JSON.parse(entry_line.dataset.origentry).type ? JSON.parse(entry_line.dataset.origentry).type : '';
+                        updateEntryOpts(entry_line, type);
+                    }
+                    if (entryAcctToFill !== false) {
+                        for (const child of entryAcctToFill.children) {
+                            if (child.classList.contains('deb_acct') || child.classList.contains('cred_acct')) {
+                                let newAcctInOptions;
+                                for (const opt of child.children) {
+                                    if (opt.value == values.name) newAcctInOptions = true;
+                                }
+                                if (newAcctInOptions === true) {
+                                    child.value = values.name;
+                                }
+                            }
+                        }
+                    }
+                }
+            );
+        } catch(err) {
+            flash(err.message);
+            console.log(err);
+            return;
+        }
+    });
+}
+
+function editAcctValidateLine(edit_acct_line) {
     let els = getEditAcctLineEls(edit_acct_line);
-    let entryAcctToFill = false;
-    if (edit_acct_line.previousElementSibling.classList.contains('entry_acct')) entryAcctToFill = edit_acct_line.previousElementSibling;
     let values = {
         name: els.name.value ? els.name.value : '',
         typecodes: '',
@@ -3142,90 +3194,18 @@ async function editAcctSaveNewAcct (edit_acct_line) {
     }
     if (!values.name) {
         errors += 'Name is required. ';
+    } else {
+        if (values.name == '***') {
+            errors += 'Account name not allowed. '
+        }
     }
     if (!values.parent_acct) {
         errors += 'Parent is required. ';
     }
     if (errors) {
-        flash(errors);
+        throw new Error(errors);
     } else {
-        /* insertDimensionRequest
-        {insertDimension:  {
-            "range": {
-                //object (DimensionRange)
-                "sheetId": integer,
-                "dimension": enum (Dimension), 'ROWS'|'COLUMNS'
-                "startIndex": integer,
-                "endIndex": integer
-            },
-            "inheritFromBefore": true|false
-        }
-        */
-        let sheetId;
-        for (const sheet of ssprops.sheets) {
-            if (sheet.properties.title == 'Account List') {
-                sheetId = sheet.properties.sheetId;
-            }
-        }
-        let startIndex;
-        for (let i = 0; i < accts.length; i++) {
-            if (accts[i][0] == values.parent_acct) {
-                startIndex = i + 2;
-            }
-        }
-        let response;
-        try {
-            response = await gapi.client.sheets.spreadsheets.batchUpdate({
-                spreadsheetId: ssid,
-                requests: [{
-                    insertDimension: {
-                        range: {
-                            sheetId: sheetId,
-                            dimension: 'ROWS',
-                            startIndex: startIndex,
-                            endIndex: startIndex + 1,
-                        },
-                        inheritFromBefore: true,
-                    }
-                }]
-            });
-            batchUpdateValues(
-                [`Account List!A${startIndex + 1}`],
-                [[[
-                    values.name,
-                    values.typecodes,
-                    values.parent_acct,
-                    values.budget
-                ]]],
-                async function() {
-                    await bha_sync();
-                    edit_acct_line.remove();
-                    populateEditAccts();
-                    let entriesToUpdate = document.getElementsByClassName('entry');
-                    for (const entry_line of entriesToUpdate) {
-                        let type = JSON.parse(entry_line.dataset.origentry).type ? JSON.parse(entry_line.dataset.origentry).type : '';
-                        updateEntryOpts(entry_line, type);
-                    }
-                    if (entryAcctToFill !== false) {
-                        for (const child of entryAcctToFill.children) {
-                            if (child.classList.contains('deb_acct') || child.classList.contains('cred_acct')) {
-                                let newAcctInOptions;
-                                for (const opt of child.children) {
-                                    if (opt.value == values.name) newAcctInOptions = true;
-                                }
-                                if (newAcctInOptions === true) {
-                                    child.value = values.name;
-                                }
-                            }
-                        }
-                    }
-                }
-            )
-            
-        } catch(err) {
-            flash(err.message);
-            return;
-        }
+        return values;
     }
 }
 
@@ -3233,117 +3213,127 @@ function editAcctCancelNewAcct(edit_acct_line) {
     edit_acct_line.remove();
 }
 
-async function editAcctMvLineUp(edit_acct_line) {
+async function acctsStillSynced() {
+    let accts_response;
+    try {
+        accts_response = await gapi.client.sheets.spreadsheets.values.batchGet({
+            spreadsheetId: ssid,
+            ranges: ['Account List!A2:D']
+        });
+    } catch (err) {
+        flash(err.message);
+        console.log(err);
+        return;
+    }
+    let liveAccts = accts_response.result.valueRanges[0].values;
+    let sameLength = accts.length == liveAccts.length;
+    let acctNamesMatch = true;
+    for (let i = 0; i > liveAccts.length; i++) {
+        if (liveAccts[i][0] != accts[i][0]) acctNamesMatch = false;
+    }
+    if (sameLength == false || acctNamesMatch == false) {
+        accts = liveAccts;
+        populateEditAccts();
+        throw new Error('Account list has become unsynced. Please try again.')
+    }
+}
+
+async function eaMvLineUp(edit_acct_line) {
     let els = getEditAcctLineEls(edit_acct_line);
-    let name = els.name.value ? els.name.value : '';
-    let parent_acct = els.parent.value ? els.parent.value : '';
-    
-    /*
-    if it's the first child, disable the button.
-    if it's not the first child, put it right before the previous
-    */
+    let name = els.orig.name ? els.orig.name : '';
+    let parent = els.orig.parent ? els.orig.parent : '';
     let currentSsIndex;
     let parentSsIndex;
     let destinationSsIndex;
+    
     for (let i = 0; i < accts.length; i++) {
         if (accts[i][0] == name) {
-            currentSsIndex = i + 1;
+            currentSsIndex = i;
         }
-        if (accts[i][0] == parent_acct) {
-            parentSsIndex = i + 1;
+        if (accts[i][0] == parent) {
+            parentSsIndex = i;
         }
     }
-    for (let i = currentSsIndex - 2; i > parentSsIndex - 1; i--) {
-        if (accts[i][2] == parent_acct) {
-            destinationSsIndex = i + 1;
+    for (let i = currentSsIndex - 1; i > parentSsIndex; i--) {
+        if (accts[i][2] == parent) { 
+            destinationSsIndex = i; // move it ahead of the previous account with the same parent
             break;
         }
     }
     if (!destinationSsIndex) {
         els.mvup_btn.disabled = true;
-    } else {
-        let response;
-        let sheetId;
-        for (const sheet of ssprops.sheets) {
-            if (sheet.properties.title == 'Account List') {
-                sheetId = sheet.properties.sheetId;
+        return;
+    }
+    try {
+        await acctsStillSynced();
+    } catch(err) {
+        flash(err.message);
+        console.log(err);
+        return;
+    }
+    accts.splice(destinationSsIndex, 0, accts.splice(currentSsIndex, 1)[0]);
+    organizeSubAccts(name);
+    batchUpdateValues(['Account List!A2'], [accts], populateEditAccts()); // no need to Sync because we've already updated the entire accts array
+}
+
+function organizeSubAccts(name) {
+    let acctsToMove = [];
+    function extractSubs(parent) {
+        for (let i = 0; i < accts.length; i++) {
+            if (accts[i][2] == parent) {
+                let subName = accts[i][0];
+                acctsToMove.push(accts.splice(i, 1)[0]);
+                extractSubs(subName);
+                i--; // run the same index again because we removed the item at current index.
             }
         }
-        try {
-            response = await gapi.client.sheets.spreadsheets.batchUpdate({
-                spreadsheetId: ssid,
-                requests: [{
-                    moveDimension: {
-                        source: {
-                            sheetId: sheetId,
-                            dimension: 'ROWS',
-                            startIndex: currentSsIndex,
-                            endIndex: currentSsIndex + 1
-                        },
-                        destinationIndex: destinationSsIndex
-                    }
-                }]
-            })
-        } catch (err) {
-            flash(err.message);
-            return;
+    }
+    extractSubs(name);
+    for (let i = 0; i < accts.length; i++) {
+        if (accts[i][0] == name) {
+            accts.splice(i + 1, 0, ...acctsToMove);
+            break;
         }
-        bha_sync();
     }
 }
 
-async function editAcctMvLineDown(edit_acct_line) {
+async function eaMvLineDown(edit_acct_line) {
     let els = getEditAcctLineEls(edit_acct_line);
-    let name = els.name.value ? els.name.value : '';
-    let parent_acct = els.parent.value ? els.parent.value : '';
-    /*
-    if it's the last child, disable the button.
-    if it's not the last child, put it right after the next
-    */
+    let name = els.orig.name ? els.orig.name : '';
+    let parent = els.orig.parent ? els.orig.parent : '';
     let currentSsIndex;
     let destinationSsIndex;
     for (let i = 0; i < accts.length; i++) {
         if (accts[i][0] == name) {
-            currentSsIndex = i + 1;
+            currentSsIndex = i;
         }
     }
-    for (let i = currentSsIndex; i < accts.length; i++) {
-        if (accts[i][2] == parent_acct) {
-            destinationSsIndex = i + 2;
-            break;
+    let nextSibling;
+    let subsToSkip = [];
+    for (let i = currentSsIndex + 1; i < accts.length; i++) {
+        if (!nextSibling && accts[i][2] == parent) {
+            nextSibling = accts[i][0];
+            destinationSsIndex = i + 1;
+        }
+        if (accts[i][2] == nextSibling || subsToSkip.includes(accts[i][2])) {
+            subsToSkip.push(accts[i][0]);
+            destinationSsIndex = i + 1;
         }
     }
     if (!destinationSsIndex) {
         els.mvdn_btn.disabled = true;
-    } else {
-        let response;
-        let sheetId;
-        for (const sheet of ssprops.sheets) {
-            if (sheet.properties.title == 'Account List') {
-                sheetId = sheet.properties.sheetId;
-            }
-        }
-        try {
-            response = await gapi.client.sheets.spreadsheets.batchUpdate({
-                spreadsheetId: ssid,
-                requests: [{
-                    moveDimension: {
-                        source: {
-                            sheetId: sheetId,
-                            dimension: 'ROWS',
-                            startIndex: currentSsIndex,
-                            endIndex: currentSsIndex + 1
-                        },
-                        destinationIndex: destinationSsIndex
-                    }
-                }]
-            })
-        } catch (err) {
-            flash(err.message);
-            return;
-        }
-        bha_sync();
+        return;
     }
+    try {
+        await acctsStillSynced();
+    } catch(err) {
+        flash(err.message);
+        console.log(err);
+        return;
+    }
+    accts.splice(destinationSsIndex - 1, 0, accts.splice(currentSsIndex, 1)[0]); // must subtract 1 from destination index because we've removed an earlier index with the splice.
+    organizeSubAccts(name);
+    batchUpdateValues(['Account List!A2'], [accts], populateEditAccts()); // no need to Sync because we've already updated the entire accts array
 }
 
 function editAcctDeleteAcct(edit_acct_line) {
@@ -3372,7 +3362,6 @@ function editAcctDeleteAcct(edit_acct_line) {
 }
 
 let editAcctClickHandler = function(e) {
-    if (e.target.classList.contains('edit_accts_add_acct_btn')) editAcctCreateNewAcct();
     if (e.target.classList.contains('ea_arrow')) {
         let edit_acct_line = e.target.parentElement.parentElement;
         editAcctToggleSubs(edit_acct_line);
@@ -3403,11 +3392,11 @@ let editAcctClickHandler = function(e) {
     }
     if (e.target.classList.contains('edit_acct_mvup_button')) {
         let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctMvLineUp(edit_acct_line);
+        eaMvLineUp(edit_acct_line);
     }
     if (e.target.classList.contains('edit_acct_mvdn_button')) {
         let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctMvLineDown(edit_acct_line);
+        eaMvLineDown(edit_acct_line);
     }
 }
 
@@ -3695,9 +3684,6 @@ function getLedgerLine(acct, data) {
     return div;
 }
 
-// for viewing a list of accounts
-// there will be a few bugs in the following code if the same parent account shows up twice on the same page
-
 function getLedgerLineEls(ledger_line) {
     /* returns {
         togSubs: .ledger_line_arrow,
@@ -3767,6 +3753,16 @@ function ledgersClickHandler(e) {
     if (e.target.classList.contains('toggle_ledger_entries')) {
         const ledger_line = e.target.parentElement.parentElement;
         toggleLedgerEntries(ledger_line);
+    }
+}
+
+function ledgersChangeHandler(e) {
+    if (e.target.id == 'ledgers_accts_select') {
+        if (e.target.value == 'A' || e.target.value == 'L' || e.target.value == 'Q' || e.target.value == 'P') {
+            document.getElementById('ledger_from_date').value = `${today.getFullYear()}-01-01`;
+        } else {
+            document.getElementById('ledger_from_date').value = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-01`;
+        }
     }
 }
 
@@ -4534,6 +4530,7 @@ if (ssprops) {
         goToPage('add_entry');
     }
 }
+
 if (localStorage.getItem('last_sync')) {
     document.getElementById('last_sync').textContent = `synced ${localStorage.getItem('last_sync')} `
 }
@@ -4553,11 +4550,12 @@ if (localStorage.getItem('entryQueue')) {
 
 newBlankEntry('exp');
 
-document.getElementById('content').addEventListener('change', navbarChangeHandler);
+document.getElementById('navbar').addEventListener('change', navbarChangeHandler);
 document.getElementById('content').addEventListener('click', addEntryClickHandler);
 document.getElementById('content').addEventListener('change', addEntryChangeHandler);
 document.getElementById('content').addEventListener('focus', addEntryFocusHandler);
 document.getElementById('content').addEventListener('click', ledgersClickHandler);
+document.getElementById('content').addEventListener('change', ledgersChangeHandler)
 document.getElementById('content').addEventListener('click', journalClickHandler);
 document.getElementById('content').addEventListener('click', eomClickHandler);
 document.getElementById('content').addEventListener('change', eomChangeHandler);
@@ -4565,6 +4563,6 @@ document.getElementById('content').addEventListener('click', rcrgClickHandler);
 document.getElementById('content').addEventListener('change', rcrgChangeHandler);
 document.getElementById('content').addEventListener('click', editAcctClickHandler);
 document.getElementById('content').addEventListener('change', editAcctChangeHandler);
-document.getElementById('content').addEventListener('click', setupClickHandler);
-document.getElementById('content').addEventListener('change', setupChangeHandler);
-document.getElementById('content').addEventListener('paste', setupPasteHandler);
+document.getElementById('setup').addEventListener('click', setupClickHandler);
+document.getElementById('setup').addEventListener('change', setupChangeHandler);
+document.getElementById('setup').addEventListener('paste', setupPasteHandler);
