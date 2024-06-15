@@ -15,11 +15,11 @@ function checkBeforeStart() {
       document.getElementById("connect_btn").style.display = 'inline';
       // FOR DEV ONLY - DOES IT BREAK THEIR NEW RULES?
       if (localStorage.getItem('gapiTokenExp')) {
+        document.getElementById('save_signin').checked = true;
           if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) {
               gapi.client.setToken({access_token : localStorage.getItem('gapiToken')});
               updateInterfaceForSignin();
           } else {
-            localStorage.removeItem('gapiToken');
             localStorage.removeItem('gapiTokenExp');
           }
       }
@@ -69,7 +69,6 @@ async function handleConnectClick() {
 }
 
 function revokeToken() {
-  localStorage.removeItem('gapiToken');
   localStorage.removeItem('gapiTokenExp');
   let cred = gapi.client.getToken();
   if (cred !== null) {
@@ -84,8 +83,10 @@ async function justGotToken() {
   tokenExpirationInMS = now.getTime() + gapi.client.getToken().expires_in * 1000;
   
   // FOR DEV ONLY does it break their new rules?
-  localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
-  localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+  if (localStorage.getItem('gapiToken')) {
+    localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+    localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+  }
   // END FOR DEV ONLY
 
   if (ssprops) {
@@ -163,15 +164,11 @@ async function bha_sync() {
   if (!prevSSIDs.hasOwnProperty(ssid)) {
       prevSSIDs[ssid] = ssprops.properties.title;
       localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+      populatePrevSSIDs();
   } else if (prevSSIDs[ssid] != ssprops.properties.title) {
       prevSSIDs[ssid] = ssprops.properties.title;
       localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-      for (const id in prevSSIDs) {
-          let opt = document.createElement('option');
-          opt.value = id;
-          opt.textContent = prevSSIDs[id];
-          prevSSIDsSelect.append(opt);
-      }
+      populatePrevSSIDs();
   }
   if (Object.keys(prevSSIDs).length > 1) {
       document.getElementById('setup_previous_journals').style.display = 'block';
@@ -195,22 +192,24 @@ async function bha_sync() {
   }
 
   let lastSync = `${mos[today.getMonth()]} ${today.getDate()}`;
-  localStorage.setItem('last_sync', lastSync);
   document.getElementById('last_sync').textContent = `synced ${lastSync} `;
 
   journal = result.valueRanges[1].values ? result.valueRanges[1].values : [];
   
-  // FOR DEVELOPMENT ONLY:
-  localStorage.setItem('journal', JSON.stringify(journal ? journal : []));
-  // END FOR DEVELOPMENT ONLY
-
   accts = result.valueRanges[0].values ? result.valueRanges[0].values : [];
-  localStorage.setItem('account_list', JSON.stringify(accts));
 
   rcrgs = result.valueRanges[2].values ? result.valueRanges[2].values : [];
-  localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
 
   eom_ledger = {};
+
+  if (localStorage.getItem('gapiToken')) {
+    // FOR DEVELOPMENT ONLY, need to stress test:
+    localStorage.setItem('journal', JSON.stringify(journal ? journal : []));
+    // END FOR DEVELOPMENT ONLY
+    localStorage.setItem('account_list', JSON.stringify(accts));
+    localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
+    localStorage.setItem('last_sync', lastSync);
+  }
 }
 
 async function resetViewsAfterSync() {
@@ -226,6 +225,7 @@ function updateInterfaceForSignin() {
   document.getElementById('setup_signin_instructions').style.display = 'none';
   document.getElementById('setup_create_new_journal').style.display = 'block';
   document.getElementById('setup_open_journal').style.display = 'block';
+  document.getElementById('setup_save_signin').style.display = 'block';
   if (ssprops) {
       document.getElementById('top_title').textContent = ssprops.properties.title;
       document.getElementById('setup_journal_name').style.display = 'block';
@@ -246,8 +246,8 @@ function updateInterfaceForSignout() {
   document.getElementById('disconnect_btn').style.display = 'none';
   document.getElementById('setup_signin_instructions').style.display = 'block';
   document.getElementById('setup_journal_name').style.display = 'none';
-  document.getElementById('setup_journal_name').style.display = 'none';
   document.getElementById('edit_journal_name').disabled = true;
   document.getElementById('setup_create_new_journal').style.display = 'none';
   document.getElementById('setup_open_journal').style.display = 'none';
+  document.getElementById('setup_save_signin').style.display = 'none';
 }

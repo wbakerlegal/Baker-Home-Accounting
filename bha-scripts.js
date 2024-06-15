@@ -15,21 +15,26 @@
 
 // To-do: 
 
-// repopulate prevSSIDs when opening or creating a journal
-// change doIf_StillSynced and batchUpdateValues functions to promise based rather than callback
 // identify the popup blocked error and prompt user
 // make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
+// how to handle clearing particular saved SSIDs
+// journal entries correctly displaying chronological by date, but incorrectly reversing the order of entries on each date
+// change doIf_StillSynced and batchUpdateValues functions to promise-based rather than callback
+// in journal, button to view/edit rcrg template from rcrg instance?
+// delete entry from journal
+// keyboard navigation
+// for performance, don't populate entry options until it's editable. Only populate the selected option. Need to revise the 'getElementsByClassName('entry')' when updating accounts
 
+// accessibility
 // localization
 /*
 In ledgers:
---- visual indication for sub-accounts
---- show the running balance if an A/L/Q ledger is populated with a Jan 1 start date. Don't show running balance for A/L/Q if start date is not BOY.
+--- some visual indication for sub-accounts
+--- On an A/L/Q ledger, topline should show final balance next to the delta between debits and credits. Which requires the ajax call to go to BoY then a second filtering by selected date. Also handle multiple years. 
+--- On A/L/Q ledger, how to show the running balance.
 --- add annual closing and opening entries for A/L/Q accounts to December EOM review
 */
-/*
-in journal, button to view/edit rcrg template from rcrg instance?
-*/
+
 /*
 check writing function: export docx files using jszip. Or generate a pdf?
 in Edit Accounts, add typecode "C": "writes checks" for cash accounts
@@ -432,6 +437,20 @@ function getEntryInputLine(e) {
     details.append(date);
 
     let deb_accts = mkc('deb_accts');
+
+    const debs_header = mkc('entry_accts_header');
+    const deb_lbl_wrap = mkc('side_label_wrap');
+    const deb_lbl = mkc('debit_label', 'span');
+    deb_lbl.textContent = 'debits:';
+    deb_lbl_wrap.append(deb_lbl);
+    const debs_wrap = mkc('deb_wrap');
+    const debs = mkc('entry_debits', 'span');
+    debs.textContent = '$' + insertCommas(e.debits);
+    debs.style.display = deb_acctsVal.length > 1 ? 'inline' : 'none';
+    debs_wrap.append(debs);
+    debs_header.append(deb_lbl_wrap, debs_wrap);
+    deb_accts.append(debs_header);
+
     if (deb_acctsVal.length == 0) {
         let div = getEntryAcct({side: 'deb', type: typeVal})
         deb_accts.append(div);
@@ -449,6 +468,20 @@ function getEntryInputLine(e) {
     }
     
     let cred_accts = mkc('cred_accts');
+
+    const creds_header = mkc('entry_accts_header');
+    const cred_lbl_wrap = mkc('side_label_wrap');
+    const cred_lbl = mkc('credit_label', 'span');
+    cred_lbl.textContent = 'credits:';
+    cred_lbl_wrap.append(cred_lbl);
+    const creds_wrap = mkc('cred_wrap');
+    const creds = mkc('entry_credits', 'span');
+    creds.textContent = '$' + insertCommas(e.credits);
+    creds.style.display = cred_acctsVal.length > 1 ? 'inline' : 'none';
+    creds_wrap.append(creds);
+    creds_header.append(cred_lbl_wrap, creds_wrap);
+    cred_accts.append(creds_header);
+    
     if (cred_acctsVal.length == 0) {
         let div = getEntryAcct({side: 'cred', type: typeVal})
         cred_accts.append(div);
@@ -484,7 +517,7 @@ function getEntryInputLine(e) {
         mkrcrg_btn.style.display = e.hasOwnProperty('rcrgindex') ? 'none' : 'inline';
         summary_div.append(edit_btn, cancel_btn, save_btn, mkrcrg_btn);
     }
-    entry.append(typebox, details, deb_accts, cred_accts, summary_div);
+    entry.append(details, typebox, deb_accts, cred_accts, summary_div);
     const els = getEntryInputElements(entry);
     showHideEntryAcctBtns(els);
     return entry;
@@ -509,6 +542,7 @@ function getEntryAcct(opts) {
     let amtVal = opts.hasOwnProperty('amt') ? parseFloat(opts.amt).toFixed(2) : '';
 
     let div = mkc('entry_acct');
+
     let acct_select = mkc(`${side}_acct`, 'select');
     acct_select.name = `${side}_acct`;
     acct_select.disabled = true;
@@ -576,9 +610,11 @@ function getEntryInputElements(entry_container) {
         split:,
         add_deb:,
         add_cred:,
+        debits:,
         deb_accts: [],
         rem_deb_acct_btns: [],
         deb_amts: [],
+        credits:,
         cred_accts: [],
         rem_cred_acct_btns: [],
         cred_amts: [],
@@ -610,6 +646,14 @@ function getEntryInputElements(entry_container) {
                 els.date = child;
                 continue;
             }
+            if (child.classList.contains('debit_label')) {
+                els.debLbl = child;
+                continue;
+            }
+            if (child.classList.contains('entry_debits')) {
+                els.debits = child;
+                continue;
+            }
             if (child.classList.contains('deb_acct')) {
                 els.deb_accts.push(child);
                 continue;
@@ -619,6 +663,14 @@ function getEntryInputElements(entry_container) {
             }
             if (child.classList.contains('deb_amt')) {
                 els.deb_amts.push(child);
+                continue;
+            }
+            if (child.classList.contains('credit_label')) {
+                els.credLbl = child;
+                continue;
+            }
+            if (child.classList.contains('entry_credits')) {
+                els.credits = child;
                 continue;
             }
             if (child.classList.contains('cred_acct')) {
@@ -737,9 +789,10 @@ function subValidateDesc(descInputDOM, errorsArr, quiet) {
 }
 
 function subValidateAcctNames(els, errorsArr, quiet) {
+    let missingAcct;
     for (let i = 0; i < els.deb_accts.length; i++) {
         if (!els.deb_accts[i].value || els.deb_accts[i].value == '***') {
-            errorsArr.push(`Debit account ${i + 1} cannot be blank.`)
+            missingAcct = true;
             if (!quiet) els.deb_accts[i].classList.add('error');
         } else {
             els.deb_accts[i].classList.remove('error');
@@ -747,12 +800,13 @@ function subValidateAcctNames(els, errorsArr, quiet) {
     }
     for (let i = 0; i < els.cred_accts.length; i++) {
         if (!els.cred_accts[i].value || els.cred_accts[i].value == '***') {
-            errorsArr.push(`Credit account ${i + 1} cannot be blank.`)
+            missingAcct = true;
             if (!quiet) els.cred_accts[i].classList.add('error');
         } else {
             els.cred_accts[i].classList.remove('error');
         }
     }
+    if (missingAcct) errorsArr.push('Missing account.')
 }
 
 function updateEntryOpts(entry_line, _type) {
@@ -826,13 +880,40 @@ function updateEntryOpts(entry_line, _type) {
         els.gen.classList.add('active_type');
     }
 }
-
 function entryAmtAutoComplete(els) {
+    //lock/unlock:
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
+        els.deb_amts[0].disabled = false;
+        els.cred_amts[0].disabled = true;
+    } else {
+        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
+        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
+    }
+
+    // clear any previous autocomplete:
     if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
+    
+    // lock the credit to the debit if only one each
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0);
-        els.cred_amts[0].value = amt == 0 ? '' : amt.toFixed(2);
+        if (amt != 0) {
+            els.deb_amts[0].classList.remove('error');
+            els.cred_amts[0].classList.remove('error');
+            els.cred_amts[0].value = amt.toFixed(2);
+        }
+        else {
+            els.cred_amts[0].value = '';
+        }
+
+        els.debits.textContent = '';
+        els.debits.style.display = 'none';
+        els.credits.textContent = '';
+        els.credits.style.display = 'none';
+        els.debits.classList.remove('error');
+        els.credits.classList.remove('error');
+
     } else {
+        // total everything up and see if there's only one empty amount
         let debits = 0;
         let credits = 0;
         let emptyAmts = 0;
@@ -843,16 +924,31 @@ function entryAmtAutoComplete(els) {
                     emptyAmts++;
                 } else {
                     debits += parseFloat(els.deb_amts[i].value);
+                    els.deb_amts[i].classList.remove('error');
                 }
             } else {
-                els.cred_amts[i - els.deb_amts.length].setAttribute('list', null);
-                if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
+                const j = i - els.deb_amts.length;
+                els.cred_amts[j].setAttribute('list', null);
+                if (!parseFloat(els.cred_amts[j].value)) {
                     emptyAmts++;
                 } else {
-                    credits += parseFloat(els.cred_amts[i - els.deb_amts.length].value);
+                    credits += parseFloat(els.cred_amts[j].value);
+                    els.cred_amts[j].classList.remove('error');
                 }
             }
         }
+        
+        // update summaries
+        els.debits.textContent = '$' + insertCommas(debits);
+        els.debits.style.display = els.deb_amts.length > 1 ? 'inline' : 'none';
+        els.credits.textContent = '$' + insertCommas(credits);
+        els.credits.style.display = els.cred_amts.length > 1 ? 'inline' : 'none';
+        if (debits.toFixed(2) == credits.toFixed(2)) {
+            els.debits.classList.remove('error');
+            els.credits.classList.remove('error');
+        }
+
+        // create autocomplete
         if (emptyAmts == 1) {
             let balance = Math.abs(debits - credits).toFixed(2);
             let datalist = mk('datalist');
@@ -878,47 +974,30 @@ function entryAmtAutoComplete(els) {
     }
 }
 
-function lockUnlockEntryAmts(els) {
-    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        els.deb_amts[0].disabled = false;
-        els.cred_amts[0].disabled = true;
-    } else {
-        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
-        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
-    }
-}
-
 function subValidateEntryAmts(els, errorsArr, quiet) {
-    lockUnlockEntryAmts(els);
-    entryAmtAutoComplete(els);
+    entryAmtAutoComplete(els); // this removes any error class and locks/unlocks
     let debits = 0;
     let credits = 0;
+    let missingAmt = false;
     for (let i = 0; i < els.deb_amts.length; i++) {
         if (!els.deb_amts[i].value) {
-            errorsArr.push(`Debit amount ${i + 1} missing value.`);
+            missingAmt = true;
             if (!quiet) els.deb_amts[i].classList.add('error');
-        } else {
-            els.deb_amts[i].classList.remove('error');
         }
         debits += els.deb_amts[i].value ? parseFloat(els.deb_amts[i].value) : 0;
     }
     for (let i = 0; i < els.cred_amts.length; i++) {
         if (!els.cred_amts[i].value) {
-            errorsArr.push(`Credit amount ${i + 1} missing value.`)
-            if (!quiet) els.cred_amts[i].classList.add('error');
-        } else {
-            els.cred_amts[i].classList.remove('error');
+            missingAmt = true;
+            if (!quiet & els.cred_amts.length > 1) els.cred_amts[i].classList.add('error');
         }
         credits += els.cred_amts[i].value ? parseFloat(els.cred_amts[i].value) : 0;
     }
+    if (missingAmt == true) errorsArr.push('Missing amount.');
     if (debits.toFixed(2) != credits.toFixed(2)) {
         errorsArr.push('Total debits must equal total credits.');
-        for (const amt of els.deb_amts) {
-            if (!quiet) amt.classList.add('error');
-        }
-        for (const amt of els.cred_amts) {
-            if (!quiet) amt.classList.add('error');
-        }
+        if (!quiet) els.debits.classList.add('error');
+        if (!quiet) els.credits.classList.add('error');
     }
 }
 
@@ -1007,7 +1086,6 @@ function entryAddAcctClk(entry_container, side) {
     }
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
-    lockUnlockEntryAmts(els);
     entryAmtAutoComplete(els);
     els.split.style.display = 'inline';
     els.add_deb.style.display = 'none';
@@ -1019,7 +1097,6 @@ function entryRemAcctClk(entry_acct_div) {
     entry_acct_div.remove();
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
-    lockUnlockEntryAmts(els);
     entryAmtAutoComplete(els);
 }
 
@@ -1129,6 +1206,8 @@ let addEntryChangeHandler = function(e) {
             }
         }
     }
+    // clear error if has value:
+    if ((e.target.classList.contains('desc') || e.target.classList.contains('date') || e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) && e.target.value) e.target.classList.remove('error');
 }
 
 let addEntryFocusHandler = function(e) {
@@ -1503,6 +1582,10 @@ function mkRcrg(entry_line) {
         let div = getRcrgLine(template);
         div.classList.add('popunder');
         let templateEls = getRcrgLineEls(div);
+        templateEls.debLbl.classList.add('popunder');
+        templateEls.credLbl.classList.add('popunder');
+        templateEls.debits.classList.add('popunder');
+        templateEls.credits.classList.add('popunder');
         editRcrg(div);
         templateEls.cancel.classList.remove('cancel_rcrg');
         templateEls.cancel.classList.add('cancel_new_entry');
@@ -1922,6 +2005,20 @@ function getRcrgLine(e) {
     rcrg_details.append(s1, rcrg_index, s2, rcrg_type, on_text_1, rcrg_qty, on_text_2, rcrg_period);
 
     let deb_accts = mkc('deb_accts');
+
+    const debs_header = mkc('entry_accts_header');
+    const deb_lbl_wrap = mkc('side_label_wrap');
+    const deb_lbl = mkc('debit_label', 'span');
+    deb_lbl.textContent = 'debits:';
+    deb_lbl_wrap.append(deb_lbl);
+    const debs_wrap = mkc('deb_wrap');
+    const debs = mkc('entry_debits', 'span');
+    debs.textContent = '$' + insertCommas(e.debits);
+    debs.style.display = deb_acctsVal.length > 1 ? 'inline' : 'none';
+    debs_wrap.append(debs);
+    debs_header.append(deb_lbl_wrap, debs_wrap);
+    deb_accts.append(debs_header);
+
     if (deb_acctsVal.length == 0) {
         let div = getEntryAcct({side: 'deb', type: typeVal})
         deb_accts.append(div);
@@ -1939,6 +2036,20 @@ function getRcrgLine(e) {
     }
     
     let cred_accts = mkc('cred_accts');
+
+    const creds_header = mkc('entry_accts_header');
+    const cred_lbl_wrap = mkc('side_label_wrap');
+    const cred_lbl = mkc('credit_label', 'span');
+    cred_lbl.textContent = 'credits:';
+    cred_lbl_wrap.append(cred_lbl);
+    const creds_wrap = mkc('cred_wrap');
+    const creds = mkc('entry_credits', 'span');
+    creds.textContent = '$' + insertCommas(e.credits);
+    creds.style.display = cred_acctsVal.length > 1 ? 'inline' : 'none';
+    creds_wrap.append(creds);
+    creds_header.append(cred_lbl_wrap, creds_wrap);
+    cred_accts.append(creds_header);
+
     if (cred_acctsVal.length == 0) {
         let div = getEntryAcct({side: 'cred', type: typeVal})
         cred_accts.append(div);
@@ -1974,10 +2085,10 @@ function getRcrgLine(e) {
     countdown.textContent = `next on: ${mos[expectedDate.getMonth()]} ${expectedDate.getDate()}, ${expectedDate.getFullYear()}`;
     summary_div.append(edit_btn, cancel_btn, save_btn, delete_btn, inst_btn, countdown);
 
-    entry.append(typebox, details, rcrg_details, deb_accts, cred_accts, summary_div);
+    entry.append(details, typebox, rcrg_details, deb_accts, cred_accts, summary_div);
     let els = getRcrgLineEls(entry);
     showHideEntryAcctBtns(els);
-    entryAmtAutoComplete(els);
+    //entryAmtAutoComplete(els);
     return entry;
 }
 
@@ -2087,7 +2198,8 @@ function validateRcrgLine(line, quiet) {
     }
 
     subValidateDesc(els.desc, errors, quiet);
-    subValidateEntryAmts(els, errors, quiet);
+    //subValidateEntryAmts(els, errors, quiet);
+    entryAmtAutoComplete(els);
     showHideEntryAcctBtns(els);
     
     if (errors.length > 0 && !quiet) {
@@ -2167,6 +2279,10 @@ function createRcrg(type) {
         });
         div.classList.add('popunder');
         let els = getRcrgLineEls(div);
+        els.debLbl.classList.add('popunder');
+        els.credLbl.classList.add('popunder');
+        els.debits.classList.add('popunder');
+        els.credits.classList.add('popunder');
         editRcrg(div);
         els.cancel.classList.remove('cancel_rcrg');
         els.cancel.classList.add('cancel_new_entry');
@@ -2292,7 +2408,7 @@ function editRcrg(entry_line) {
             els.rem_cred_acct_btns[i].disabled = false;
             els.cred_amts[i].disabled = false;
         }
-        lockUnlockEntryAmts(els);
+        entryAmtAutoComplete(els);
     })
 }
 
@@ -2446,6 +2562,10 @@ function instRcrgEntry(entry_line) {
     let div = getEntryInputLine(template);
     div.classList.add('popunder');
     let dels = getEntryInputElements(div);
+    dels.debLbl.classList.add('popunder');
+    dels.credLbl.classList.add('popunder');
+    dels.debits.classList.add('popunder');
+    dels.credits.classList.add('popunder');
     dels.cancel.classList.remove('cancel_entry');
     dels.cancel.classList.add('cancel_new_entry');
     dels.cancel.style.display = 'inline';
@@ -3535,7 +3655,7 @@ function get_ledger(from_date, to_date, type) { // date = '2024-05-24'; type = '
 
         function credit_parent(parent) {
             if (accts_list.hasOwnProperty(parent)) {
-                accts_list[parent].credit_from_subs = parseFloat((accts_list[parent].credit_from_subs + parseFloat(amt)).toFixed(2)); // debit the first-level parent first
+                accts_list[parent].credit_from_subs = parseFloat((accts_list[parent].credit_from_subs + parseFloat(amt)).toFixed(2)); // credit the first-level parent first
                 if (accts_list[parent].hasOwnProperty('parent')) {
                     credit_parent(accts_list[parent].parent);
                 }
@@ -3675,10 +3795,12 @@ function getLedgerLine(acct, data) {
     totCred.textContent = data.credit == 0 ? 'credits: 0' : 'credits: $' + insertCommas(parseFloat(data.credit).toFixed(2));
     totNums.append(totDeb, s, totCred);
     entries.append(totNums);
+    let list = mk();
     for (const entry of data.ledger_entries) {
         let entrydiv = getEntryInputLine(entry);
-        entries.append(entrydiv);
+        list.append(entrydiv);
     }
+    entries.append(list);
     entries.style.display = 'none';
     div.append(summ, entries);
     return div;
@@ -4218,6 +4340,20 @@ let eomChangeHandler = function(e) {
 
 // END MODULE EOM Review BEGIN MODULE general setup
 
+function populatePrevSSIDs() {
+    let prevSSIDsSelect = document.getElementById('open_journal_select');
+    while (prevSSIDsSelect.firstChild) prevSSIDsSelect.firstChild.remove();
+    for (const id in prevSSIDs) {
+        let opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = prevSSIDs[id];
+        prevSSIDsSelect.append(opt);
+    }
+    if (Object.keys(prevSSIDs).length > 1) {
+        document.getElementById('setup_previous_journals').style.display = 'block';
+    }
+}
+
 async function saveSsid() {
     isSignedIn(async () => { // don't delete prevSSIDs
         localStorage.removeItem('spreadsheetID');
@@ -4504,6 +4640,19 @@ let setupChangeHandler = function(e) {
         validateSSID(input);
     } else if (e.target.id == 'ssid') {
         validateSSID(e.target);
+    } else if (e.target.id == 'save_signin') {
+        if (e.target.checked) {
+            localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+            localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+            if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
+            if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
+            if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
+        } else {
+            localStorage.removeItem('gapiToken');
+            localStorage.removeItem('journal');
+            localStorage.removeItem('account_list');
+            localStorage.removeItem('rcrgs');
+        }
     }
 }
 
@@ -4535,13 +4684,7 @@ if (localStorage.getItem('last_sync')) {
     document.getElementById('last_sync').textContent = `synced ${localStorage.getItem('last_sync')} `
 }
 
-let prevSSIDsSelect = document.getElementById('open_journal_select');
-for (const id in prevSSIDs) {
-    let opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = prevSSIDs[id];
-    prevSSIDsSelect.append(opt);
-}
+populatePrevSSIDs();
 
 if (localStorage.getItem('entryQueue')) {
     queue = JSON.parse(localStorage.getItem('entryQueue'));
