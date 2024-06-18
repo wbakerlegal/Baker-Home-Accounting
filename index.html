@@ -24,6 +24,17 @@
             </span>
         </div>
         <div id="navbar">
+            <div id="flash_msg_box">
+                <div id="flash_msg"></div>
+                <div id="flash_msg_close">X</div>
+            </div>
+            <div id="flash_conf_box">
+                <div id="flash_conf"></div>
+                <div id="flash_conf_buttons">
+                    <button id="flash_conf_no">cancel</button>
+                    <button id="flash_conf_yes">OK</button>
+                </div>
+            </div>
             <select id="nav_menu" name="nav_menu" disabled>
                 <option value="add_entry">Add entry</option>
                 <option value="ledgers">Ledgers</option>
@@ -61,6 +72,9 @@
                     <button id="edit_journal_name">edit</button>
                     <button id="cancel_edit_journal_name">cancel</button>
                     <button id="save_journal_name">save</button>
+                    <div id="setup_spreadsheet_link">
+                        View journal <a id="spreadsheet_link" title="View journal in Google Sheets">in Google Sheets</a> to change sharing permissions and other settings.
+                    </div>
                 </div>
                 <div id="setup_create_new_journal">
                     <h4>Create a new journal:</h4>
@@ -86,8 +100,8 @@
                         </div>
                         <div id="setup_previous_journals">
                             <label for="open_journal_select">previously opened journals: </label>
-                            <select id="open_journal_select">
-                            </select>
+                            <select id="open_journal_select"></select>
+                            <button id="remove_saved_ssid">remove</button>
                         </div>
                     </div>
                 </div>
@@ -102,7 +116,7 @@
                     <!--<a title="Support q͜ʘ’s development" href="donate.html">Donate</a>-->
                     <!--<select id="localization"><option value="en-us">English</option></select>-->
                 </div>
-                <div id="footer_copyright">&copy; 2024 William Baker. Licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may view a copy of the License <a href="LICENSE.md" title="plain text Apache-2.0 license">here</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
+                <div id="footer_copyright">&copy; 2024 William Baker. Licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may view a copy of the License <a href="LICENSE.txt" title="plain text Apache-2.0 license">here</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
             </div>
         </div>
         <script src="bha-auth-scripts.js?3"></script>

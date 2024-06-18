@@ -146,6 +146,63 @@ input:disabled, select:disabled {
 #navbar_buttons input {
     flex: 0 1 auto;
 }
+#flash_msg_box, #flash_conf_box {
+    position: fixed;
+    z-index: 10;
+    display: none;
+    background-color: #F5A778;
+    color: #75675F;
+    font-weight: bold;
+    border-radius: 0.35rem;
+    top: 0.5rem;
+    left: 1.5%;
+    width: 97%;
+    box-sizing: border-box;
+}
+#flash_msg_box a, #flash_conf_box a {
+    color: #FFF;
+}
+#flash_msg_box a:hover, #flash_conf_box a:hover {
+    color: #78CBF5;
+}
+#flash_msg_box {
+    padding: 0.62rem 0 0.62rem 0.62rem;
+    align-items: center;
+}
+#flash_msg {
+    flex: 1 1 auto;
+    text-wrap: wrap;
+    overflow: hidden;
+    padding-right: 0.5rem;
+    border-right: 0.15rem solid #75675F;
+}
+#flash_msg_close {
+    flex: 0 0 2rem;
+    text-align: center;
+}
+#flash_conf_box {
+    padding: 0.62rem;
+}
+#flash_conf {
+    padding-bottom: 0.5rem;
+}
+#flash_conf_buttons {
+    display: flex;
+    padding-top: 0.5rem;
+    gap: 0.5rem;
+    justify-content: right;
+}
+#flash_conf_buttons button {
+    flex: 0 0 5.5rem;
+}
+#flash_conf_no {
+    background-color: #F5A778;
+    padding: 0.35rem;
+    border: 0.15rem solid #75675F;
+}
+#flash_conf_yes {
+    background-color: #FFF;
+}
 .main {
     padding:0 1.5rem;
 }
@@ -214,7 +271,6 @@ input:disabled, select:disabled {
 .date {
     /*flex: 1 1 auto;*/
     flex: 0 1 auto;
-    font-weight: bold;
     text-align: right;
 }
 .type_container {
@@ -456,12 +512,23 @@ input:disabled, select:disabled {
     font-weight: bold;
 }
 .rcrg_template_countdown {
-    padding: 0.5rem;
+    padding: 0.45rem;
     border-radius: 0.35rem;
     color: #75675F;
     font-style: italic;
     font-size: 0.83rem;
-    border: 1px solid #75675F;
+    border: .05rem solid #75675F;
+}
+.rcrg_overdue, .rcrg_upcoming {
+    padding: 0.35rem;
+    border: .15rem solid #75675F;
+    font-weight: bold;
+}
+.rcrg_overdue {
+    background-color: #F5A778;
+}
+.rcrg_upcoming {
+    background-color: #DAEDF7;
 }
 
 /* edit acct styles */
@@ -543,7 +610,7 @@ input:disabled, select:disabled {
     margin: 0.75rem 2.5rem;
     font-size: 1.25rem;
 }
-#setup_journal_name, #cancel_edit_journal_name, #save_journal_name, #setup_create_new_journal, #setup_open_journal, #flash_msg_history, #setup_previous_journals {
+#setup_journal_name, #cancel_edit_journal_name, #save_journal_name, #setup_create_new_journal, #setup_open_journal, #flash_msg_history, #setup_previous_journals, #remove_saved_ssid {
     display: none;
 }
 #setup_journal_name {
@@ -552,6 +619,10 @@ input:disabled, select:disabled {
 }
 #journal_name:disabled {
     border: 1px solid #75675F;
+}
+#setup_spreadsheet_link {
+    padding-top: 0.5rem;
+    font-size: 0.83rem;
 }
 #setup_open_journal {
     margin-top: 1.33em;

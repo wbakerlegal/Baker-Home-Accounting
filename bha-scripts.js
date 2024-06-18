@@ -15,16 +15,34 @@
 
 // To-do: 
 
-// identify the popup blocked error and prompt user
-// make a 'keep me logged in' option on the setup page and only retain the token if checked. Deciding how to prompt user upon signin. Might integrate with new flash interface that's not alert-based
-// how to handle clearing particular saved SSIDs
+// keyboard navigation
 // journal entries correctly displaying chronological by date, but incorrectly reversing the order of entries on each date
 // change doIf_StillSynced and batchUpdateValues functions to promise-based rather than callback
 // in journal, button to view/edit rcrg template from rcrg instance?
-// delete entry from journal
-// keyboard navigation
-// for performance, don't populate entry options until it's editable. Only populate the selected option. Need to revise the 'getElementsByClassName('entry')' when updating accounts
+// for performance, don't populate entry options until it's editable. Only populate the selected option when creating, and then again if cancelEdit is called. Need to revise the 'getElementsByClassName('entry')' when updating accounts
 
+/* allow columns outside those
+called by bha_sync to have persistent data.
+Meaning, don't insert and delete rows.
+Therefore, I'd have to remove a row 
+from the global journal, accts, or rcrgs array 
+and rewrite the entire contents starting with 
+the inserted row, or next row after deleted. 
+That might be ok for accts and rcrgs but not journal. 
+In any case, have a new journal populate a notice 
+in Journal!F1, Account List!E1, and 
+Recurring Entries!H1 notifying user of data 
+persistency in that and following columns. 
+-- add notice to all templates:
+---- Journal: USER NOTICE: Do not change any data in Columns A through E. q͜ʘ does not access data in columns F and following. Rows may be inserted and deleted. Do not keep any information in columns F and following. 
+---- Account List: USER NOTICE: Do not change any data in Columns A through D. q͜ʘ does not access data in columns E and following, and does not alter any data in those columns.
+---- journal: USER NOTICE: Do not change any data in Columns A through G. q͜ʘ does not access data in columns H and following, and does not alter any data in those columns.
+-- change edit accts and rcrgs functions (editAcctSaveNewAcct, editAcctDeleteAcct, saveRcrg, deleteRcrg) to edit the global arrays then rewrite spreadsheet contents without insertrows or deleterows. First write the journal entry delete function before changing rcrg's stable function
+*/
+// Google calendar integration for recurring entries. Or can I just send an email and have gmail interpret it correctly?
+// social integration: create and share templates
+/* for link from calendar: how to embed user data safely?
+*/
 // accessibility
 // localization
 /*
@@ -34,7 +52,9 @@ In ledgers:
 --- On A/L/Q ledger, how to show the running balance.
 --- add annual closing and opening entries for A/L/Q accounts to December EOM review
 */
-
+/*
+multi-journal operations. For example, my home budget and sole proprietorship are separate journals. Have an owner draw in the business show up as income in the home budget.
+*/
 /*
 check writing function: export docx files using jszip. Or generate a pdf?
 in Edit Accounts, add typecode "C": "writes checks" for cash accounts
@@ -92,8 +112,43 @@ let rcrgs = localStorage.getItem('rcrgs') ? JSON.parse(localStorage.getItem('rcr
 
 let eom_ledger;
 
-function flash(message) {
-    alert(message);
+function flash(message, callback, cancel_callback) {
+    // alert(message);
+    let flashContent;
+    if (typeof message == 'string') {
+        flashContent = mk('span');
+        flashContent.textContent = message;
+    } else flashContent = message;
+    if (!callback) {
+        while (document.getElementById('flash_msg').firstChild) document.getElementById('flash_msg').firstChild.remove();
+        document.getElementById('flash_msg').append(flashContent);
+        document.getElementById('flash_msg_box').style.display = 'flex';
+    } else {
+        while (document.getElementById('flash_conf').firstChild) document.getElementById('flash_conf').firstChild.remove();
+        document.getElementById('flash_conf').append(flashContent);
+        function resetFlashConfBtns() {
+            while (document.getElementById('flash_conf').firstChild) document.getElementById('flash_conf').firstChild.remove();
+            document.getElementById('flash_conf_yes').onclick = '';
+            document.getElementById('flash_conf_no').onclick = () => {
+                document.getElementById('flash_conf_box').style.display = 'none';
+                document.getElementById('flash_conf_yes').onclick = '';
+                while (document.getElementById('flash_conf').firstChild) document.getElementById('flash_conf').firstChild.remove();
+            }
+        }
+        document.getElementById('flash_conf_yes').onclick = () => {
+            document.getElementById('flash_conf_box').style.display = 'none';
+            resetFlashConfBtns();
+            callback();
+        }
+        if (cancel_callback) {
+            document.getElementById('flash_conf_no').onclick = () => {
+                document.getElementById('flash_conf_box').style.display = 'none';
+                resetFlashConfBtns();
+                cancel_callback();
+            }
+        }
+        document.getElementById('flash_conf_box').style.display = 'block';
+    }
 }
 
 function insertCommas(float) {
@@ -227,7 +282,7 @@ async function deleteRows(sheetName, startIndex0, endIndex0, callback) {
         };
     } catch (err) {
         flash(err.message);
-        return;
+        throw err;
     }
     if (!delete_response) {
         flash('Nope');
@@ -275,11 +330,21 @@ async function insertRows(sheetName, startIndex0, endIndex0) {
         });
     } catch(err) {
         flash(err.message);
-        return;
+        throw err;
     }
 }
 
 // uncategorized dom generation
+function mk(element) { //make
+    return document.createElement(element ? element : 'div');
+}
+
+function mkc(_class, _element) { // mk= make; c = by class name
+    let el = document.createElement(_element ? _element : 'div');
+    el.classList.add(_class);
+    return el;
+}
+
 function getAcctOptEls(type, selected_acct_name) {
     let a = [];
     for (const acct of accts) {
@@ -296,16 +361,6 @@ function getAcctOptEls(type, selected_acct_name) {
         }
     }
     return a;
-}
-
-function mk(element) { //make
-    return document.createElement(element ? element : 'div');
-}
-
-function mkc(_class, _element) { // mk= make; c = by class name
-    let el = document.createElement(_element ? _element : 'div');
-    el.classList.add(_class);
-    return el;
 }
 
 /*
@@ -340,6 +395,24 @@ function goToPage(page) {
     if (page == 'rcrg') initializeRcrg();
     if (page == 'edit_accts')  initializeEditAccts();
     if (page == 'journal') initializeJournal();
+}
+
+function closeFlashMsg() {
+    document.getElementById('flash_msg_box').style.display = 'none';
+}
+
+function closeFlashConf() {
+    document.getElementById('flash_conf_box').style.display = 'none';
+    document.getElementById('flash_conf_yes').onclick = '';
+    document.getElementById('flash_conf').textContent = '';
+}
+
+let navbarClickHandler = function(e) {
+    if (e.target.id == 'flash_msg_close') {
+        closeFlashMsg();
+    } else if (e.target.id == 'flash_conf_no') {
+        closeFlashConf()
+    }
 }
 
 let navbarChangeHandler = function(e) {
@@ -389,15 +462,19 @@ function getEntryInputLine(e) {
     let typebox = mkc('type_container');
     let exp_btn = mkc('exp_btn', 'button');
     exp_btn.textContent = 'expense';
+    exp_btn.tabIndex = -1;
     exp_btn.disabled = true;
     let inc_btn = mkc('inc_btn', 'button');
     inc_btn.textContent = 'income';
+    inc_btn.tabIndex = -1;
     inc_btn.disabled = true;
     let tfr_btn = mkc('tfr_btn', 'button');
     tfr_btn.textContent = 'transfer';
+    tfr_btn.tabIndex = -1;
     tfr_btn.disabled = true;
     let gen_btn = mkc('gen_btn', 'button');
     gen_btn.textContent = 'general';
+    gen_btn.tabIndex = -1;
     gen_btn.disabled = true;
     if (typeVal == 'exp') {
         exp_btn.classList.add('active_type');
@@ -410,13 +487,16 @@ function getEntryInputLine(e) {
     }
     let split_btn  = mkc('split_entry', 'button');
     split_btn.textContent = 'split';
+    split_btn.tabIndex = -1;
     split_btn.disabled = true;
     let add_deb = mkc('add_deb_acct', 'button');
     add_deb.textContent = 'add debit';
+    add_deb.tabIndex = -1;
     add_deb.disabled = true;
     add_deb.style.display = 'none';
     let add_cred = mkc('add_cred_acct', 'button');
     add_cred.textContent = 'add credit';
+    add_cred.tabIndex = -1;
     add_cred.disabled = true;
     add_cred.style.display = 'none';
     typebox.append(exp_btn, inc_btn, tfr_btn, gen_btn, split_btn, add_deb, add_cred);
@@ -512,10 +592,13 @@ function getEntryInputLine(e) {
         let save_btn = mkc('save_entry', 'button');
         save_btn.textContent = 'save';
         save_btn.style.display = 'none';
+        let del_btn = mkc('delete_entry', 'button');
+        del_btn.textContent = 'delete';
+        del_btn.style.display = 'none';
         let mkrcrg_btn = mkc('make_rcrg_entry', 'button');
         mkrcrg_btn.textContent = 'make recurring';
         mkrcrg_btn.style.display = e.hasOwnProperty('rcrgindex') ? 'none' : 'inline';
-        summary_div.append(edit_btn, cancel_btn, save_btn, mkrcrg_btn);
+        summary_div.append(edit_btn, cancel_btn, save_btn, del_btn, mkrcrg_btn);
     }
     entry.append(details, typebox, deb_accts, cred_accts, summary_div);
     const els = getEntryInputElements(entry);
@@ -728,6 +811,10 @@ function getEntryInputElements(entry_container) {
                 els.save = child;
                 continue;
             }
+            if (child.classList.contains('delete_entry')) {
+                els.delete = child;
+                continue;
+            }
             if (child.classList.contains('make_rcrg_entry')) {
                 els.mkrcrg = child;
                 continue;
@@ -743,70 +830,122 @@ function getEntryInputElements(entry_container) {
     return els;
 }
 
-function validateEntryInputs(entry_container, quiet) {
-    let errors = [];
-    let els = getEntryInputElements(entry_container);
-    if (!els.date.value) {
-        errors.push('Date is missing.');
-        if (!quiet) els.date.classList.add('error');
-    } else {
-        els.date.classList.remove('error');
+function entryAmtChanged(target) {
+    target.value = parseFloat(target.value) ? parseFloat(target.value).toFixed(2) : '';
+    const entry_container = target.parentElement.parentElement.parentElement;
+    const els = getEntryInputElements(entry_container);
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
+        if (target.classList.contains('deb_amt')) {
+            els.cred_amts[0].value = target.value;  // we already sanitized the target's value above
+        } else {
+            els.deb_amts[0].value = target.value;
+        }
     }
-    subValidateDesc(els.desc, errors, quiet);
-    subValidateAcctNames(els, errors, quiet);
-    showHideEntryAcctBtns(els);
-    subValidateEntryAmts(els, errors, quiet);
+    entryAmtAutoComplete(els);
+}
+
+function entryAcctChanged(target) {
+    if (target.value == '***') {
+        if (!isSignedIn(() => {
+            let acct_row = target.parentElement;
+            let entry_line = acct_row.parentElement.parentElement;
+            let type = getEntryInputElements(entry_line).entry_data.type;
+            let side = target.classList.contains('deb_acct') ? 'deb' : 'cred';
+            let typecode = type == 'exp' ? side == 'deb' ? 'E' : 'P'
+                         : type == 'inc' ? side == 'deb' ? 'A' : 'R' 
+                         : '';
+            let div = getNewAcctLine({typecodes: typecode});
+            div.classList.add('popunder');
+            acct_row.after(div); 
+        })) {
+            target.value = '';
+        }
+    }
+}
+
+function entryAmtAutoComplete(els) {
+    els.debits.classList.remove('popunder');
+    els.credits.classList.remove('popunder');
+
+    // clear any previous autocomplete:
+    if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
     
-    if (errors.length > 0 && !quiet) {
-        let text = '';
-        for (const error of errors) {
-            text += error + ' ';
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
+        let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0); // we already made deb and cred amt the same in the event dispatcher
+        if (amt != 0) {
+            els.deb_amts[0].classList.remove('error');
+            els.cred_amts[0].classList.remove('error');
         }
-        flash(text);
-        return false;
-    } else if (errors.length == 0) {
-        return true;
-    }
-}
-
-function subValidateDesc(descInputDOM, errorsArr, quiet) {
-    let desc = descInputDOM.value;
-    if (!desc) {
-        errorsArr.push('Description is missing.');
-        if (!quiet) descInputDOM.classList.add('error');
-    } else if (desc.includes('RCRG')) {
-        errorsArr.push('Description cannot contain the sequence "RCRG"');
-        if (!quiet) descInputDOM.classList.add('error');
-    } else if (desc.substring(0,13) == 'OPENING ENTRY') {
-        errorsArr.push('Description cannot begin with "OPENING ENTRY"');
-        if (!quiet) descInputDOM.classList.add('error');
-    } else if (desc.substring(0,13) == 'CLOSING ENTRY') {
-        errorsArr.push('Description cannot begin with "CLOSING ENTRY"');
-        if (!quiet) descInputDOM.classList.add('error');
+        else {
+            els.deb_amts[0].value = '';
+            els.cred_amts[0].value = '';
+        }
+        els.debits.textContent = '';
+        els.debits.style.display = 'none';
+        els.credits.textContent = '';
+        els.credits.style.display = 'none';
+        els.debits.classList.remove('error');
+        els.credits.classList.remove('error');
     } else {
-        descInputDOM.classList.remove('error');
-    }
-}
+        // total everything up and see if there's only one empty amount
+        let debits = 0;
+        let credits = 0;
+        let emptyAmts = 0;
+        for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
+            if (i < els.deb_amts.length) {
+                els.deb_amts[i].setAttribute('list', null);
+                if (!parseFloat(els.deb_amts[i].value)) {
+                    emptyAmts++;
+                } else {
+                    debits += parseFloat(els.deb_amts[i].value);
+                    els.deb_amts[i].classList.remove('error');
+                }
+            } else {
+                const j = i - els.deb_amts.length;
+                els.cred_amts[j].setAttribute('list', null);
+                if (!parseFloat(els.cred_amts[j].value)) {
+                    emptyAmts++;
+                } else {
+                    credits += parseFloat(els.cred_amts[j].value);
+                    els.cred_amts[j].classList.remove('error');
+                }
+            }
+        }
+        
+        // update summaries
+        els.debits.textContent = '$' + insertCommas(debits);
+        els.debits.style.display = els.deb_amts.length > 1 ? 'inline' : 'none';
+        els.credits.textContent = '$' + insertCommas(credits);
+        els.credits.style.display = els.cred_amts.length > 1 ? 'inline' : 'none';
+        if (debits.toFixed(2) == credits.toFixed(2)) {
+            els.debits.classList.remove('error');
+            els.credits.classList.remove('error');
+        }
 
-function subValidateAcctNames(els, errorsArr, quiet) {
-    let missingAcct;
-    for (let i = 0; i < els.deb_accts.length; i++) {
-        if (!els.deb_accts[i].value || els.deb_accts[i].value == '***') {
-            missingAcct = true;
-            if (!quiet) els.deb_accts[i].classList.add('error');
-        } else {
-            els.deb_accts[i].classList.remove('error');
+        // create autocomplete
+        if (emptyAmts == 1) {
+            let balance = Math.abs(debits - credits).toFixed(2);
+            let datalist = mk('datalist');
+            datalist.id = 'split_entry_difference';
+            let amt = mk('option');
+            amt.value = balance;
+            datalist.append(amt);
+            els.container.append(datalist);
+            for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
+                if (i < els.deb_amts.length) {
+                    if (!parseFloat(els.deb_amts[i].value)) {
+                        els.deb_amts[i].setAttribute('list', 'split_entry_difference');
+                        break;
+                    }
+                } else {
+                    if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
+                        els.cred_amts[i - els.deb_amts.length].setAttribute('list', 'split_entry_difference');
+                        break;
+                    }
+                }
+            }
         }
     }
-    for (let i = 0; i < els.cred_accts.length; i++) {
-        if (!els.cred_accts[i].value || els.cred_accts[i].value == '***') {
-            missingAcct = true;
-            if (!quiet) els.cred_accts[i].classList.add('error');
-        } else {
-            els.cred_accts[i].classList.remove('error');
-        }
-    }
-    if (missingAcct) errorsArr.push('Missing account.')
 }
 
 function updateEntryOpts(entry_line, _type) {
@@ -880,98 +1019,71 @@ function updateEntryOpts(entry_line, _type) {
         els.gen.classList.add('active_type');
     }
 }
-function entryAmtAutoComplete(els) {
-    //lock/unlock:
-    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        els.deb_amts[0].disabled = false;
-        els.cred_amts[0].disabled = true;
-    } else {
-        for (let i = 0; i < els.deb_amts.length; i++) els.deb_amts[i].disabled = false;
-        for (let i = 0; i < els.cred_amts.length; i++) els.cred_amts[i].disabled = false;
-    }
 
-    // clear any previous autocomplete:
-    if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
+function validateEntryInputs(entry_container, quiet) {
+    let errors = [];
+    let els = getEntryInputElements(entry_container);
+    if (!els.date.value) {
+        errors.push('Date is missing.');
+        if (!quiet) els.date.classList.add('error');
+    } else {
+        els.date.classList.remove('error');
+    }
+    subValidateDesc(els.desc, errors, quiet);
+    subValidateAcctNames(els, errors, quiet);
+    showHideEntryAcctBtns(els);
+    subValidateEntryAmts(els, errors, quiet);
     
-    // lock the credit to the debit if only one each
-    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0);
-        if (amt != 0) {
-            els.deb_amts[0].classList.remove('error');
-            els.cred_amts[0].classList.remove('error');
-            els.cred_amts[0].value = amt.toFixed(2);
+    if (errors.length > 0 && !quiet) {
+        let text = '';
+        for (const error of errors) {
+            text += error + ' ';
         }
-        else {
-            els.cred_amts[0].value = '';
-        }
+        flash(text);
+        return false;
+    } else if (errors.length == 0) {
+        return true;
+    }
+}
 
-        els.debits.textContent = '';
-        els.debits.style.display = 'none';
-        els.credits.textContent = '';
-        els.credits.style.display = 'none';
-        els.debits.classList.remove('error');
-        els.credits.classList.remove('error');
-
+function subValidateDesc(descInputDOM, errorsArr, quiet) {
+    let desc = descInputDOM.value;
+    if (!desc) {
+        errorsArr.push('Description is missing.');
+        if (!quiet) descInputDOM.classList.add('error');
+    } else if (desc.includes('RCRG')) {
+        errorsArr.push('Description cannot contain the sequence "RCRG"');
+        if (!quiet) descInputDOM.classList.add('error');
+    } else if (desc.substring(0,13) == 'OPENING ENTRY') {
+        errorsArr.push('Description cannot begin with "OPENING ENTRY"');
+        if (!quiet) descInputDOM.classList.add('error');
+    } else if (desc.substring(0,13) == 'CLOSING ENTRY') {
+        errorsArr.push('Description cannot begin with "CLOSING ENTRY"');
+        if (!quiet) descInputDOM.classList.add('error');
     } else {
-        // total everything up and see if there's only one empty amount
-        let debits = 0;
-        let credits = 0;
-        let emptyAmts = 0;
-        for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
-            if (i < els.deb_amts.length) {
-                els.deb_amts[i].setAttribute('list', null);
-                if (!parseFloat(els.deb_amts[i].value)) {
-                    emptyAmts++;
-                } else {
-                    debits += parseFloat(els.deb_amts[i].value);
-                    els.deb_amts[i].classList.remove('error');
-                }
-            } else {
-                const j = i - els.deb_amts.length;
-                els.cred_amts[j].setAttribute('list', null);
-                if (!parseFloat(els.cred_amts[j].value)) {
-                    emptyAmts++;
-                } else {
-                    credits += parseFloat(els.cred_amts[j].value);
-                    els.cred_amts[j].classList.remove('error');
-                }
-            }
-        }
-        
-        // update summaries
-        els.debits.textContent = '$' + insertCommas(debits);
-        els.debits.style.display = els.deb_amts.length > 1 ? 'inline' : 'none';
-        els.credits.textContent = '$' + insertCommas(credits);
-        els.credits.style.display = els.cred_amts.length > 1 ? 'inline' : 'none';
-        if (debits.toFixed(2) == credits.toFixed(2)) {
-            els.debits.classList.remove('error');
-            els.credits.classList.remove('error');
-        }
+        descInputDOM.classList.remove('error');
+    }
+}
 
-        // create autocomplete
-        if (emptyAmts == 1) {
-            let balance = Math.abs(debits - credits).toFixed(2);
-            let datalist = mk('datalist');
-            datalist.id = 'split_entry_difference';
-            let amt = mk('option');
-            amt.value = balance;
-            datalist.append(amt);
-            els.container.append(datalist);
-            for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
-                if (i < els.deb_amts.length) {
-                    if (!parseFloat(els.deb_amts[i].value)) {
-                        els.deb_amts[i].setAttribute('list', 'split_entry_difference');
-                        break;
-                    }
-                } else {
-                    if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
-                        els.cred_amts[i - els.deb_amts.length].setAttribute('list', 'split_entry_difference');
-                        break;
-                    }
-                }
-            }
+function subValidateAcctNames(els, errorsArr, quiet) {
+    let missingAcct;
+    for (let i = 0; i < els.deb_accts.length; i++) {
+        if (!els.deb_accts[i].value || els.deb_accts[i].value == '***') {
+            missingAcct = true;
+            if (!quiet) els.deb_accts[i].classList.add('error');
+        } else {
+            els.deb_accts[i].classList.remove('error');
         }
     }
+    for (let i = 0; i < els.cred_accts.length; i++) {
+        if (!els.cred_accts[i].value || els.cred_accts[i].value == '***') {
+            missingAcct = true;
+            if (!quiet) els.cred_accts[i].classList.add('error');
+        } else {
+            els.cred_accts[i].classList.remove('error');
+        }
+    }
+    if (missingAcct) errorsArr.push('Missing account.')
 }
 
 function subValidateEntryAmts(els, errorsArr, quiet) {
@@ -989,7 +1101,7 @@ function subValidateEntryAmts(els, errorsArr, quiet) {
     for (let i = 0; i < els.cred_amts.length; i++) {
         if (!els.cred_amts[i].value) {
             missingAmt = true;
-            if (!quiet & els.cred_amts.length > 1) els.cred_amts[i].classList.add('error');
+            if (!quiet) els.cred_amts[i].classList.add('error');
         }
         credits += els.cred_amts[i].value ? parseFloat(els.cred_amts[i].value) : 0;
     }
@@ -1040,7 +1152,7 @@ function addToEntryQueue(entries) {
     if (isSignedIn()) {
         uploadEntryQueue();
     } else if (queued.length == entries.length) {
-        if (confirm('Entry stored on your device until next sign-in. Sync now?')) {
+        flash('Entry stored on your device until next sign-in. Sync now?', () => {
             tokenClient.callback = (resp) => {
                 if (resp.error !== undefined) {
                     throw(resp);
@@ -1048,7 +1160,7 @@ function addToEntryQueue(entries) {
                 justGotToken(); // upload entries happens here
             }
             tokenClient.requestAccessToken();
-        }
+        })
     } else {
         flash('Entry stored. Sign in to sync.');
     }
@@ -1184,27 +1296,9 @@ let addEntryClickHandler = function(e) {
 
 let addEntryChangeHandler = function(e) {
     if (e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) {
-        e.target.value = parseFloat(e.target.value) ? parseFloat(e.target.value).toFixed(2) : '';
-        let entry_container = e.target.parentElement.parentElement.parentElement;
-        entryAmtAutoComplete(getEntryInputElements(entry_container));
-    }
-    if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
-        if (e.target.value == '***') {
-            if (!isSignedIn(() => {
-                let acct_row = e.target.parentElement;
-                let entry_line = acct_row.parentElement.parentElement;
-                let type = getEntryInputElements(entry_line).entry_data.type;
-                let side = e.target.classList.contains('deb_acct') ? 'deb' : 'cred';
-                let typecode = type == 'exp' ? side == 'deb' ? 'E' : 'P'
-                             : type == 'inc' ? side == 'deb' ? 'A' : 'R' 
-                             : '';
-                let div = getNewAcctLine({typecodes: typecode});
-                div.classList.add('popunder');
-                acct_row.after(div); 
-            })) {
-                e.target.value = '';
-            }
-        }
+        entryAmtChanged(e.target);
+    } else if (e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) {
+        entryAcctChanged(e.target)
     }
     // clear error if has value:
     if ((e.target.classList.contains('desc') || e.target.classList.contains('date') || e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) && e.target.value) e.target.classList.remove('error');
@@ -1232,6 +1326,14 @@ function processJournal(raw, startingSSRowIndex1) {
         credits: float,
         start_sheet_index1 = int,
     }]
+    raw = [[
+        date str 'yyyy-mm-dd',
+        description string,
+        account name string, 
+        debit amount string (e.g., '54.32') or '',
+        credit amount string (e.g., '54.32') or undefined
+    ]]
+    global journal[0] startingSSRowIndex1 is 2, because row 1 in the master spreadsheet is the column labels, not fetched by q͜ʘ
     */
 
     function finalize(entry) {
@@ -1315,7 +1417,7 @@ function processJournal(raw, startingSSRowIndex1) {
             entry.deb_accts.push(acct);
             entry.deb_amts.push(parseFloat(deb) ? parseFloat(deb) : parseFloat(deb) === 0 ? 0 : '');
             entry.debits += parseFloat(deb) ? parseFloat(deb) : 0;
-            entry.debits = parseFloat(entry.debits.toFixed(2));
+            entry.debits = parseFloat(entry.debits.toFixed(2)); // we want to return a mathable number. This tries to round it off but must do toFixed(2) again when displaying 
         }
         if ((!deb || parseFloat(deb) === 0) && cred) {
             entry.cred_accts.push(acct);
@@ -1328,7 +1430,6 @@ function processJournal(raw, startingSSRowIndex1) {
             finalize(entry);
         }
     }
-    
     return returned;
 }
 
@@ -1428,8 +1529,7 @@ async function doIfEntryStillSynced(entry_line, callback) { // calling function 
         });
     } catch(err) {
         flash('Error');
-        console.log(err);
-        return;
+        throw err;
     }
     let entryOnLiveDB = processJournal(database_response.result.valueRanges[0].values)[0];
     if (localOrigEntry.date == entryOnLiveDB.date && localOrigEntry.desc == entryOnLiveDB.desc && localOrigEntry.deb_accts.length == entryOnLiveDB.deb_accts.length && localOrigEntry.cred_accts.length == entryOnLiveDB.cred_accts.length) {
@@ -1466,6 +1566,11 @@ function editEntry(entry_line) {
         els.save.style.display = 'inline';
         els.save.disabled = false;
     }
+    if (els.delete) {
+        els.delete.style.display = 'inline';
+        els.delete.disabled = false;
+    }
+
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = false;
         els.rem_deb_acct_btns[i].disabled = false;
@@ -1476,7 +1581,7 @@ function editEntry(entry_line) {
         els.rem_cred_acct_btns[i].disabled = false;
         els.cred_amts[i].disabled = false;
     }
-    subValidateEntryAmts(els, [], true); // this re-locks the entry inputs to their standard behavior
+    entryAmtAutoComplete(els); // in case it was last edited missing an amount
 }
 
 function cancelEditEntry(entry_line) {
@@ -1496,6 +1601,8 @@ function cancelEditEntry(entry_line) {
     els.cancel.disabled = true;
     els.save.style.display = 'none';
     els.save.disabled = true;
+    els.delete.style.display = 'none';
+    els.delete.disabled = true;
     for (let i = 0; i < els.deb_accts.length; i++) {
         els.deb_accts[i].disabled = true;
         els.rem_deb_acct_btns[i].disabled = true;
@@ -1558,6 +1665,25 @@ function saveEntry(entry_line) {
     });
 }
 
+function deleteEntry(entry_line) {
+    isSignedIn(() => {
+        doIfEntryStillSynced(entry_line, () => {
+            const els = getEntryInputElements(entry_line);
+            const origEntry = els.entry_data;
+            flash(`Confirm to delete entry "${orig.desc}" from ${months[parseInt(orig.date.substring(5,7)) - 1]} ${parseInt(orig.date.substring(8))}, ${orig.date.substring(0,4)}?`, () => {
+                let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
+                let startIndex = origEntry.start_sheet_index1 - 1; // deleteRows is index 0
+                let endIndex = startIndex + noRows;
+                deleteRows('Journal', startIndex, endIndex, () => {
+                    journal.splice(startIndex - 1, noRows); // -1 for header row
+                    entry_line.remove();
+                    flash('Entry deleted.');
+                });
+            })
+        })
+    })
+}
+
 function mkRcrg(entry_line) {
     isSignedIn(() => {
         let els = getEntryInputElements(entry_line);
@@ -1602,8 +1728,8 @@ function mkRcrg(entry_line) {
     });
 }
 
-let journalClickHandler = function(e) {
-    let entry_container = e.target.parentElement.parentElement;
+const journalClickHandler = function(e) {
+    const entry_container = e.target.parentElement.parentElement;
     if (e.target.classList.contains('edit_entry')) {
         isSignedIn(() => { // checking here because we use the function when populating
             editEntry(entry_container);
@@ -1612,6 +1738,8 @@ let journalClickHandler = function(e) {
         cancelEditEntry(entry_container);
     } else if (e.target.classList.contains('save_entry')) {
         saveEntry(entry_container);
+    } else if (e.target.classList.contains('delete_entry')) {
+        deleteEntry(entry_container);
     } else if (e.target.classList.contains('make_rcrg_entry')) {
         mkRcrg(entry_container);
     } else if (e.target.classList.contains('cancel_new_entry')) {
@@ -1874,15 +2002,19 @@ function getRcrgLine(e) {
     let typebox = mkc('type_container');
     let exp_btn = mkc('exp_btn', 'button');
     exp_btn.textContent = 'expense';
+    exp_btn.tabIndex = -1;
     exp_btn.disabled = true;
     let inc_btn = mkc('inc_btn', 'button');
     inc_btn.textContent = 'income';
+    inc_btn.tabIndex = -1;
     inc_btn.disabled = true;
     let tfr_btn = mkc('tfr_btn', 'button');
     tfr_btn.textContent = 'transfer';
+    tfr_btn.tabIndex = -1;
     tfr_btn.disabled = true;
     let gen_btn = mkc('gen_btn', 'button');
     gen_btn.textContent = 'general';
+    gen_btn.tabIndex = -1;
     gen_btn.disabled = true;
     if (typeVal == 'exp') {
         exp_btn.classList.add('active_type');
@@ -1895,13 +2027,16 @@ function getRcrgLine(e) {
     }
     let split_btn  = mkc('split_entry', 'button');
     split_btn.textContent = 'split';
+    split_btn.tabIndex = -1;
     split_btn.disabled = true;
     let add_deb = mkc('add_deb_acct', 'button');
     add_deb.textContent = 'add debit';
+    add_deb.tabIndex = -1;
     add_deb.disabled = true;
     add_deb.style.display = 'none';
     let add_cred = mkc('add_cred_acct', 'button');
     add_cred.textContent = 'add credit';
+    add_cred.tabIndex = -1;
     add_cred.disabled = true;
     add_cred.style.display = 'none';
     typebox.append(exp_btn, inc_btn, tfr_btn, gen_btn, split_btn, add_deb, add_cred);
@@ -2081,14 +2216,24 @@ function getRcrgLine(e) {
     inst_btn.textContent = 'create entry';
     let countdown = mkc('rcrg_template_countdown');
     let expectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (e.hasOwnProperty('days_until_expected') ? e.days_until_expected : 0));
-    countdown.style.display = e.hasOwnProperty('days_until_expected') ? 'block' : 'none';
     countdown.textContent = `next on: ${mos[expectedDate.getMonth()]} ${expectedDate.getDate()}, ${expectedDate.getFullYear()}`;
+    if (e.hasOwnProperty('days_until_expected')) {
+        countdown.style.display = 'block';
+        if (e.days_until_expected < 5) {
+            if (e.days_until_expected < 0) {
+                countdown.classList.add('rcrg_overdue');
+            } else {
+                countdown.classList.add('rcrg_upcoming');
+            }
+        }
+    } else {
+        countdown.style.display = 'none';
+    }
     summary_div.append(edit_btn, cancel_btn, save_btn, delete_btn, inst_btn, countdown);
 
     entry.append(details, typebox, rcrg_details, deb_accts, cred_accts, summary_div);
     let els = getRcrgLineEls(entry);
     showHideEntryAcctBtns(els);
-    //entryAmtAutoComplete(els);
     return entry;
 }
 
@@ -2188,10 +2333,10 @@ function validateRcrgLine(line, quiet) {
     }
     let atLeastOneAcct;
     for (const el of els.deb_accts) {
-        atLeastOneAcct = el.value;
+        if (el.value) atLeastOneAcct = el.value;
     }
     for (const el of els.cred_accts) {
-        atLeastOneAcct = el.value;
+        if (el.value) atLeastOneAcct = el.value;
     }
     if (!atLeastOneAcct) {
         errors.push('Recurring template must specify at least one account to debit or credit.');
@@ -2235,8 +2380,8 @@ function updateRcrgOnText(rcrg_template_container) {
     }
 }
 
-function rcrgTypeChanged(entry_container) {
-    let els = getRcrgLineEls(entry_container);
+function rcrgTypeChanged(rcrg_line) {
+    let els = getRcrgLineEls(rcrg_line);
     if (els.rcrtype.value == 'every') {
         els.onlbl1.style.display = 'none';
         els.onlbl2.style.display = 'none';
@@ -2247,7 +2392,7 @@ function rcrgTypeChanged(entry_container) {
             els.period.append(option);
         }
     } else {
-        updateRcrgOnText(entry_container);
+        updateRcrgOnText(rcrg_line);
         els.onlbl1.style.display = 'inline';
         els.onlbl2.style.display = 'inline';
         while (els.period.firstChild) {
@@ -2302,9 +2447,9 @@ function createRcrg(type) {
     });
 }
 
-async function submitNewRcrg(entry_container) {
+async function submitNewRcrg(rcrg_line) {
     isSignedIn(async () => {
-        if (validateRcrgLine(entry_container, false)) {
+        if (validateRcrgLine(rcrg_line, false)) {
             let rcrgs_response;
             try {
                 rcrgs_response = await gapi.client.sheets.spreadsheets.values.batchGet({
@@ -2313,13 +2458,12 @@ async function submitNewRcrg(entry_container) {
                 });
             } catch(err) {
                 flash('Error' + err.toString());
-                console.log(err);
-                return;
+                throw err;
             }
             rcrgs = rcrgs_response.result.valueRanges[0].values; // update rcrgs before getting a new index
 
             let index = getNewRcrgIndex();
-            let els = getRcrgLineEls(entry_container);
+            let els = getRcrgLineEls(rcrg_line);
             let type = els.rcrtype.value;
             let qty = els.qty.value;
             let period = els.period.value;
@@ -2347,7 +2491,7 @@ async function submitNewRcrg(entry_container) {
             appendValues(ssid, 'Recurring Entries!A1', 'RAW', entries, async function() {
                 await bha_sync();
                 flash('Recurring template saved');
-                entry_container.remove()
+                rcrg_line.remove()
                 populateRcrg();
             });
         }
@@ -2366,8 +2510,7 @@ async function doIfRcrgStillSynced(rcrg_line, callback) { // calling function wi
         });
     } catch(err) {
         flash('Error');
-        console.log(err);
-        return;
+        throw err;
     }
     let entryOnLiveDB = processRcrgs(database_response.result.valueRanges[0].values)[0];
     if (localOrigEntry.rcrtype == entryOnLiveDB.rcrtype && localOrigEntry.qty == entryOnLiveDB.qty && localOrigEntry.period == entryOnLiveDB.period && localOrigEntry.desc == entryOnLiveDB.desc && localOrigEntry.deb_accts.length == entryOnLiveDB.deb_accts.length && localOrigEntry.cred_accts.length == entryOnLiveDB.cred_accts.length) {
@@ -2380,9 +2523,9 @@ async function doIfRcrgStillSynced(rcrg_line, callback) { // calling function wi
     }
 }
 
-function editRcrg(entry_line) {
+function editRcrg(rcrg_line) {
     isSignedIn(() => {
-        let els = getRcrgLineEls(entry_line);
+        let els = getRcrgLineEls(rcrg_line);
         els.rcrtype.disabled = false;
         els.qty.disabled = false;
         els.period.disabled = false;
@@ -2408,12 +2551,12 @@ function editRcrg(entry_line) {
             els.rem_cred_acct_btns[i].disabled = false;
             els.cred_amts[i].disabled = false;
         }
-        entryAmtAutoComplete(els);
+        entryAmtAutoComplete(els); // in case it was last edited missing an amount
     })
 }
 
-function cancelRcrg(entry_line) {
-    let els = getRcrgLineEls(entry_line);
+function cancelRcrg(rcrg_line) {
+    let els = getRcrgLineEls(rcrg_line);
     els.rcrtype.disabled = true;
     els.qty.disabled = true;
     els.period.disabled = true;
@@ -2441,11 +2584,11 @@ function cancelRcrg(entry_line) {
     }
 }
 
-async function saveRcrg(entry_line) { 
+async function saveRcrg(rcrg_line) { 
     isSignedIn(async () => {
-        if (validateRcrgLine(entry_line)) {
-            doIfRcrgStillSynced(entry_line, async () => {
-                let els = getRcrgLineEls(entry_line);
+        if (validateRcrgLine(rcrg_line)) {
+            doIfRcrgStillSynced(rcrg_line, async () => {
+                let els = getRcrgLineEls(rcrg_line);
                 let entries = [];
                 let origNumberRows = els.entry_data.deb_accts.length + els.entry_data.cred_accts.length;
                 for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
@@ -2471,12 +2614,22 @@ async function saveRcrg(entry_line) {
                     let rowsToAdd = entries.length - origNumberRows;
                     let startIndex = els.entry_data.start_sheet_index1 - 1 + origNumberRows;
                     let endIndex = startIndex + rowsToAdd;
-                    await insertRows('Recurring Entries', startIndex, endIndex);
+                    try {
+                        await insertRows('Recurring Entries', startIndex, endIndex);
+                    } catch(err) {
+                        flash(err.message);
+                        throw err;
+                    }
                 } else if (entries.length < origNumberRows) {
                     let rowsToDelete = origNumberRows - entries.length;
                     const startIndex = els.entry_data.start_sheet_index1 - 1 + origNumberRows - rowsToDelete;
                     const endIndex = startIndex + rowsToDelete;
-                    await deleteRows('Recurring Entries', startIndex, endIndex);
+                    try {
+                        await deleteRows('Recurring Entries', startIndex, endIndex);
+                    } catch(err) {
+                        flash(err.message);
+                        throw err;
+                    }
                 }
                 batchUpdateValues(
                     [`Recurring Entries!A${els.entry_data.start_sheet_index1}`],
@@ -2484,7 +2637,7 @@ async function saveRcrg(entry_line) {
                     async function() {
                         await bha_sync();
                         flash('Recurring template saved');
-                        entry_line.remove();
+                        rcrg_line.remove();
                         populateRcrg();
                     }
                 );
@@ -2494,18 +2647,18 @@ async function saveRcrg(entry_line) {
     })
 }
 
-function deleteRcrg(entry_line) {
+function deleteRcrg(rcrg_line) {
     isSignedIn(() => {
-        doIfRcrgStillSynced(entry_line, async () => {
+        doIfRcrgStillSynced(rcrg_line, async () => {
             let confirmMsg = 'Are you sure?';
 
-            let origEntry = JSON.parse(entry_line.dataset.origentry);
+            let origEntry = JSON.parse(rcrg_line.dataset.origentry);
             let no_entries = 0;
             let indexRE = new RegExp(`RCRG${origEntry.index}$`);
             for (const row of journal) if (indexRE.test(row[1])) no_entries++;
             if (no_entries > 0) confirmMsg += ` This will also remove the recurring flag from ${no_entries} journal entries`;
             
-            if (confirm(confirmMsg)) {
+            flash(confirmMsg, () => {
                 let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
                 let startIndex = origEntry.start_sheet_index1 - 1; // deleteRows is index 0
                 let endIndex = startIndex + noRows;
@@ -2524,20 +2677,20 @@ function deleteRcrg(entry_line) {
                     }
                     batchUpdateValues(ranges, values, function() {
                         flashMessage += ` Recurring flag removed from ${ranges.length} journal rows.`;
-                        entry_line.remove();
+                        rcrg_line.remove();
                         bha_sync();
                         flash(flashMessage);
                     })
 
                 }
                 deleteRows('Recurring Entries', startIndex, endIndex, removeRcrgIndexFlags);
-            }
+            });
         });
     })
 }
 
-function instRcrgEntry(entry_line) {
-    let els = getRcrgLineEls(entry_line);
+function instRcrgEntry(rcrg_line) {
+    let els = getRcrgLineEls(rcrg_line);
     let template = {
         type: els.entry_data.hasOwnProperty('type') ? els.entry_data.type : '',
         rcrgindex: els.entry_data.index,
@@ -2575,26 +2728,33 @@ function instRcrgEntry(entry_line) {
     dels.save.textContent = 'submit';
     dels.save.style.display = 'inline';
     editEntry(div);
-    entry_line.after(div);
+    rcrg_line.after(div);
 }
 
 let rcrgClickHandler = function(e) {
-    let entry_container = e.target.parentElement.parentElement;
-    if (e.target.classList.contains('submit_new_rcrg')) submitNewRcrg(entry_container);
-    if (e.target.classList.contains('edit_rcrg'))   editRcrg(entry_container);
-    if (e.target.classList.contains('cancel_rcrg')) cancelRcrg(entry_container);
-    if (e.target.classList.contains('save_rcrg'))   saveRcrg(entry_container);
-    if (e.target.classList.contains('delete_rcrg')) deleteRcrg(entry_container);
-    if (e.target.classList.contains('inst_rcrg'))   instRcrgEntry(entry_container);
+    let rcrg_line = e.target.parentElement.parentElement;
+    if (e.target.classList.contains('submit_new_rcrg')) {
+        submitNewRcrg(rcrg_line);
+    } else if (e.target.classList.contains('edit_rcrg')) {
+        editRcrg(rcrg_line);
+    } else if (e.target.classList.contains('cancel_rcrg')) {
+        cancelRcrg(rcrg_line);
+    } else if (e.target.classList.contains('save_rcrg')) {
+        saveRcrg(rcrg_line);
+    } else if (e.target.classList.contains('delete_rcrg')) {
+        deleteRcrg(rcrg_line);
+    } else if (e.target.classList.contains('inst_rcrg')) {
+        instRcrgEntry(rcrg_line);
+    }
 }
 
 let rcrgChangeHandler = function(e) {
     if (e.target.classList.contains('rcrg_type')) {
-        let entry_container = e.target.parentElement.parentElement;
-        rcrgTypeChanged(entry_container);
+        let rcrg_line = e.target.parentElement.parentElement;
+        rcrgTypeChanged(rcrg_line);
     } else if (e.target.classList.contains('rcrg_qty')) {
-        let entry_container = e.target.parentElement.parentElement;
-        updateRcrgOnText(entry_container);
+        let rcrg_line = e.target.parentElement.parentElement;
+        updateRcrgOnText(rcrg_line);
     }
 }
 
@@ -3120,12 +3280,14 @@ async function editAcctSaveAcct(edit_acct_line) {
                     origAcctsIndex = i;
                 }
             }
-            if (merging && confirm(`This will irreversibly merge ${els.orig.name} into ${values.name}. Proceed with extreme caution.`)) {
-                for (const row of accts) {
-                    if (row[2] == els.orig.name) row[2] = values.name;
-                }
-                ssranges.push('Account List!A2');
-                ssvalues.push([...accts.toSpliced(origAcctsIndex, 1), ['','','','']]);
+            if (merging) {
+                flash(`This will irreversibly merge ${els.orig.name} into ${values.name}. Proceed with extreme caution.`, () => {
+                    for (const row of accts) {
+                        if (row[2] == els.orig.name) row[2] = values.name;
+                    }
+                    ssranges.push('Account List!A2');
+                    ssvalues.push([...accts.toSpliced(origAcctsIndex, 1), ['','','','']]);
+                });
             }
             if (!merging) {
                 if (parentChanged) {
@@ -3481,45 +3643,6 @@ function editAcctDeleteAcct(edit_acct_line) {
     })
 }
 
-let editAcctClickHandler = function(e) {
-    if (e.target.classList.contains('ea_arrow')) {
-        let edit_acct_line = e.target.parentElement.parentElement;
-        editAcctToggleSubs(edit_acct_line);
-    }
-    if (e.target.classList.contains('ea_edit_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctEditLine(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_cancel_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctCancelEdit(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_save_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctSaveAcct(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_delete_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctDeleteAcct(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_save_new_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctSaveNewAcct(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_cancel_new_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        editAcctCancelNewAcct(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_mvup_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        eaMvLineUp(edit_acct_line);
-    }
-    if (e.target.classList.contains('edit_acct_mvdn_button')) {
-        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
-        eaMvLineDown(edit_acct_line);
-    }
-}
-
 function editAcctTypeChanged(edit_acct_line) {
     editAcctShowHideOptions(edit_acct_line);
     let els = getEditAcctLineEls(edit_acct_line);
@@ -3563,12 +3686,42 @@ function editAcctShowHideOptions(edit_acct_line) {
     }
 }
 
+let editAcctClickHandler = function(e) {
+    if (e.target.classList.contains('ea_arrow')) {
+        let edit_acct_line = e.target.parentElement.parentElement;
+        editAcctToggleSubs(edit_acct_line);
+    } else if (e.target.classList.contains('ea_edit_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctEditLine(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_cancel_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctCancelEdit(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_save_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctSaveAcct(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_delete_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctDeleteAcct(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_save_new_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctSaveNewAcct(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_cancel_new_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        editAcctCancelNewAcct(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_mvup_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        eaMvLineUp(edit_acct_line);
+    } else if (e.target.classList.contains('edit_acct_mvdn_button')) {
+        let edit_acct_line = e.target.parentElement.parentElement.parentElement;
+        eaMvLineDown(edit_acct_line);
+    }
+}
+
 let editAcctChangeHandler = function(e) {
     if (e.target.classList.contains('ea_type')) {
         let edit_acct_line = e.target.parentElement.parentElement.parentElement;
         editAcctTypeChanged(edit_acct_line);
-    }
-    if (e.target.classList.contains('ea_budget_chk')) {
+    } else if (e.target.classList.contains('ea_budget_chk')) {
         let edit_acct_line = e.target.parentElement.parentElement.parentElement.parentElement;
         editAcctShowHideOptions(edit_acct_line);
     }
@@ -3871,8 +4024,7 @@ function ledgersClickHandler(e) {
     if (e.target.classList.contains('ledger_line_arrow')) {
         const ledger_line = e.target.parentElement.parentElement;
         toggleLedgerSubs(ledger_line);
-    }
-    if (e.target.classList.contains('toggle_ledger_entries')) {
+    } else if (e.target.classList.contains('toggle_ledger_entries')) {
         const ledger_line = e.target.parentElement.parentElement;
         toggleLedgerEntries(ledger_line);
     }
@@ -4315,13 +4467,10 @@ let eomClickHandler = function(e) {
         let ledger_line = e.target.parentElement.parentElement.parentElement;
         console.log(ledger_line);
         adjNMBud(ledger_line);
-    }
-    if (e.target.classList.contains('adj_ro_btn')) {
+    } else if (e.target.classList.contains('adj_ro_btn')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement.parentElement;
         rolloverSurplus(ledger_line);
-    }
-
-    if (e.target.classList.contains('eom_submit')) {
+    } else if (e.target.classList.contains('eom_submit')) {
         submitEom();
     }
     
@@ -4331,8 +4480,7 @@ let eomChangeHandler = function(e) {
     if (e.target.classList.contains('nm_bud')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement.parentElement;
         NMBudgetChanged(ledger_line);
-    }
-    if (e.target.classList.contains('eom_nm_ro')) {
+    } else if (e.target.classList.contains('eom_nm_ro')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement.parentElement;
         NMRolloverChanged(ledger_line);
     }
@@ -4341,203 +4489,266 @@ let eomChangeHandler = function(e) {
 // END MODULE EOM Review BEGIN MODULE general setup
 
 function populatePrevSSIDs() {
-    let prevSSIDsSelect = document.getElementById('open_journal_select');
+    const prevSSIDsSelect = document.getElementById('open_journal_select');
     while (prevSSIDsSelect.firstChild) prevSSIDsSelect.firstChild.remove();
+    const firstOpt = mk('option');
+    firstOpt.textContent = 'select journal name...'
+    firstOpt.value = '';
+    prevSSIDsSelect.append(firstOpt);
     for (const id in prevSSIDs) {
         let opt = document.createElement('option');
         opt.value = id;
         opt.textContent = prevSSIDs[id];
         prevSSIDsSelect.append(opt);
     }
+    document.getElementById('remove_saved_ssid').style.display = 'none';
     if (Object.keys(prevSSIDs).length > 1) {
         document.getElementById('setup_previous_journals').style.display = 'block';
+    } else {
+        document.getElementById('setup_previous_journals').style.display = 'none';
+    }
+
+}
+
+function editJournalName(target) {
+    isSignedIn(() => {
+        document.getElementById('journal_name').disabled = false;
+        target.style.display = 'none';
+        document.getElementById('cancel_edit_journal_name').style.display = 'inline';
+        document.getElementById('save_journal_name').style.display = 'inline';
+    });
+}
+
+function cancelEditJournalName(target) {
+    document.getElementById('journal_name').disabled = true;
+    target.style.display = 'none';
+    document.getElementById('edit_journal_name').style.display = 'inline';
+    document.getElementById('save_journal_name').style.display = 'none';
+}
+
+function prevSSIDSelectChanged(target) {
+    if (target.value) {
+        let input = document.getElementById('ssid');
+        input.value = target.value;
+        validateSSID(input);
+        document.getElementById('remove_saved_ssid').style.display = 'inline';
+    } else {
+        document.getElementById('remove_saved_ssid').style.display = 'none';
     }
 }
 
-async function saveSsid() {
-    isSignedIn(async () => { // don't delete prevSSIDs
-        localStorage.removeItem('spreadsheetID');
-        localStorage.removeItem('spreadsheet_properties');
-        localStorage.removeItem('last_sync');
-        localStorage.removeItem('journal');
-        localStorage.removeItem('account_list');
-        localStorage.removeItem('rcrgs');
-        localStorage.removeItem('lastPageViewed');
-        localStorage.removeItem('entryQueue');
-        ssid = document.getElementById('ssid').value;
-        if (!ssid) {
-            flash('Spreadsheet ID cannot be blank');
-            return;
-        } else {
-            localStorage.setItem('spreadsheetID', ssid);
-        }
-        try {
-            await bha_sync();
-            flash(`Synced to spreadsheet ID ${ssid}`);
-            updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
-            goToPage('add_entry');
-        } catch(err) {
-            flash('Error: ' + err.toString());
-            console.log(err);
-            return;
-        }
-    })
+function checkAcceptLicense(callback) {
+    if (localStorage.getItem('accepted_terms') == 'true') {
+        callback();
+    } else {
+        const confirmation = mk('span');
+        const s1 = mk('span');
+        s1.textContent = 'By continuing, you accept the ';
+        const terms = mk('a');
+        terms.textContent = 'terms of use';
+        terms.title = 'terms of use';
+        terms.href = 'LICENSE.txt';
+        const s2 = mk('span');
+        s2.textContent = ' and ';
+        const priv = mk('a');
+        priv.textContent = 'privacy policy';
+        priv.href = 'privacy-policy.html';
+        confirmation.append(s1, terms, s2, priv);
+        flash(confirmation, () => {
+            localStorage.setItem('accepted_terms', 'true');
+            callback();
+        });
+    }
+    
 }
 
-async function createSpreadsheet() {
-    isSignedIn(async () => {
-        let template = document.getElementById('new_ss_templates').value;
-        let templateValues;
-        if (!template) {
-            templateValues = [
-                ['Name','Account type(s)','Parent','Monthly Budget'], 
-                ['Assets', 'A'],
-                ['Liabilities', 'L'],
-                ['Equity', 'Q'],
-                ['Expenses', 'E'],
-                ['Revenue', 'R']
-            ];
-        } else if (template == 'home') {
-            templateValues = [
-                ['Name','Account type(s)','Parent','Monthly Budget'], 
-                ['Assets', 'A'],
-                ['Cash accounts', 'A', 'Assets'],
-                ['Cash on hand', 'AP', 'Cash accounts'],
-                ['Checking account', 'AP', 'Cash accounts'],
-                ['Venmo account', 'AP', 'Cash accounts'],
-                ['Savings account', 'A', 'Cash accounts'],
-                ['Liabilities', 'L'],
-                ['Credit card', 'LP', 'Liabilities'],
-                ['Vehicle loan', 'L', 'Liabilities'],
-                ['Equity', 'Q'],
-                ['Retained Earnings', 'Q', 'Equity'],
-                ['Income Summary', 'Q', 'Equity'],
-                ['Budget', 'Q', 'Equity'],
-                ['Expenses', 'E'],
-                ['Home & personal', 'EBD', 'Expenses'],
-                ['Clothing', 'EBD', 'Home & personal'],
-                ['Medical care', 'EBD', 'Home & personal'],
-                ['Health & Beauty', 'EBD', 'Home & personal'],
-                ['Food', 'EBD', 'Expenses'],
-                ['Groceries', 'EBD', 'Food'],
-                ['Eating out', 'EBD', 'Food'],
-                ['Giving', 'E', 'Expenses'],
-                ['Christmas gifts', 'EBD', 'Giving'],
-                ['Vehicle', 'E', 'Expenses'],
-                ['Gas', 'EBD', 'Vehicle'],
-                ['Car insurance', 'EBS', 'Vehicle'],
-                ['Car maintenance', 'EBS', 'Vehicle'],
-                ['Car loan interest', 'E', 'Vehicle'],
-                ['Utilities', 'E', 'Expenses'],
-                ['Rent', 'EBS', 'Utilities'],
-                ['Cell phone', 'EBS', 'Utilities'],
-                ['Electric', 'EBD', 'Utilities'],
-                ['Water', 'EBD', 'Utilities'],
-                ['Internet & TV', 'EBS', 'Utilities'],
-                ['Trash', 'EBS', 'Utilities'],
-                ['Gas (house)', 'EBS', 'Utilities'],
-                ['Insurance', 'E', 'Expenses'],
-                ['Health insurance', 'EBS', 'Insurance'],
-                ['Home/renter\'s insurance', 'EBS', 'Insurance'],
-                ['Fun', 'E', 'Expenses'],
-                ['Entertainment', 'EBD', 'Fun'],
-                ['Hobbies', 'EBD', 'Fun'],
-                ['Vacation', 'EBD', 'Fun'],
-                ['Revenue', 'R'],
-                ['Employment income', 'RB', 'Revenue'],
-                ['Other income', 'RB', 'Revenue'],
-                ['Gifts from others', 'R', 'Revenue'],
-            ];
-        } else if (template == 'estate') {
-            templateValues = [
-                ['Name','Account type(s)','Parent','Monthly Budget'], 
-                ['Assets', 'A'],
-                ['Cash accounts', 'A', 'Assets'],
-                ['Cash on hand', 'AP', 'Cash accounts'],
-                ['Checking account', 'AP', 'Cash accounts'],
-                ['Stocks and Bonds', 'A', 'Assets'],
-                ['Mortgages and Notes', 'A', 'Assets'],
-                ['Real Estate', 'A', 'Assets'],
-                ['Miscellaneous assets', 'A', 'Assets'],
-                ['Firearms', 'A', 'Assets'],
-                ['Liabilities', 'L'],
-                ['Equity', 'Q'],
-                ['Distributions to beneficiaries', 'Q', 'Equity'],
-                ['Expenses', 'E'],
-                ['Interest expense', 'E', 'Expenses'],
-                ['Taxes', 'E', 'Expenses'],
-                ['Fiduciary fees', 'E', 'Expenses'],
-                ['Attorney, accountant, tax prep. fees', 'E', 'Expenses'],
-                ['Revenue', 'R'],
-                ['Receipts', 'R', 'Revenue'],
-                ['Insurance payable to Estate', 'R', 'Revenue'],
-                ['IRAs, 401Ks payable to Estate', 'R', 'Revenue'],
-                ['Interest income', 'R', 'Revenue'],
-                ['Dividends', 'R', 'Revenue'],
-                ['Capital gain', 'R', 'Revenue']
-            ];
-        }
-    
-        let creation_response, result;
-        try {
-            creation_response = await gapi.client.sheets.spreadsheets.create({
-                properties: {
-                    title: 'Untitled journal: Baker home accounting'
-                },
-                sheets: [{
+function saveSsid() {
+    isSignedIn(() => {
+        checkAcceptLicense(async () => {  // don't delete prevSSIDs
+            localStorage.removeItem('spreadsheetID');
+            localStorage.removeItem('spreadsheet_properties');
+            localStorage.removeItem('last_sync');
+            localStorage.removeItem('journal');
+            localStorage.removeItem('account_list');
+            localStorage.removeItem('rcrgs');
+            localStorage.removeItem('lastPageViewed');
+            localStorage.removeItem('entryQueue');
+            ssid = document.getElementById('ssid').value;
+            if (!ssid) {
+                flash('Spreadsheet ID cannot be blank');
+                return;
+            } else {
+                localStorage.setItem('spreadsheetID', ssid);
+            }
+            try {
+                await bha_sync();
+                flash(`Synced to spreadsheet ID ${ssid}`);
+                updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
+                goToPage('add_entry');
+            } catch(err) {
+                flash('Error: ' + err.toString());
+                console.log(err);
+                return;
+            }
+        });
+    });
+}
+
+function createSpreadsheet() {
+    isSignedIn(() => {
+        checkAcceptLicense(async () => {
+            let template = document.getElementById('new_ss_templates').value;
+            let templateValues;
+            if (!template) {
+                templateValues = [
+                    ['Name','Account type(s)','Parent','Monthly Budget'], 
+                    ['Assets', 'A'],
+                    ['Liabilities', 'L'],
+                    ['Equity', 'Q'],
+                    ['Expenses', 'E'],
+                    ['Revenue', 'R']
+                ];
+            } else if (template == 'home') {
+                templateValues = [
+                    ['Name','Account type(s)','Parent','Monthly Budget'], 
+                    ['Assets', 'A'],
+                    ['Cash accounts', 'A', 'Assets'],
+                    ['Cash on hand', 'AP', 'Cash accounts'],
+                    ['Checking account', 'AP', 'Cash accounts'],
+                    ['Venmo account', 'AP', 'Cash accounts'],
+                    ['Savings account', 'A', 'Cash accounts'],
+                    ['Liabilities', 'L'],
+                    ['Credit card', 'LP', 'Liabilities'],
+                    ['Vehicle loan', 'L', 'Liabilities'],
+                    ['Equity', 'Q'],
+                    ['Retained Earnings', 'Q', 'Equity'],
+                    ['Income Summary', 'Q', 'Equity'],
+                    ['Budget', 'Q', 'Equity'],
+                    ['Expenses', 'E'],
+                    ['Home & personal', 'EBD', 'Expenses'],
+                    ['Clothing', 'EBD', 'Home & personal'],
+                    ['Medical care', 'EBD', 'Home & personal'],
+                    ['Health & Beauty', 'EBD', 'Home & personal'],
+                    ['Food', 'EBD', 'Expenses'],
+                    ['Groceries', 'EBD', 'Food'],
+                    ['Eating out', 'EBD', 'Food'],
+                    ['Giving', 'E', 'Expenses'],
+                    ['Christmas gifts', 'EBD', 'Giving'],
+                    ['Vehicle', 'E', 'Expenses'],
+                    ['Gas', 'EBD', 'Vehicle'],
+                    ['Car insurance', 'EBS', 'Vehicle'],
+                    ['Car maintenance', 'EBS', 'Vehicle'],
+                    ['Car loan interest', 'E', 'Vehicle'],
+                    ['Utilities', 'E', 'Expenses'],
+                    ['Rent', 'EBS', 'Utilities'],
+                    ['Cell phone', 'EBS', 'Utilities'],
+                    ['Electric', 'EBD', 'Utilities'],
+                    ['Water', 'EBD', 'Utilities'],
+                    ['Internet & TV', 'EBS', 'Utilities'],
+                    ['Trash', 'EBS', 'Utilities'],
+                    ['Gas (house)', 'EBS', 'Utilities'],
+                    ['Insurance', 'E', 'Expenses'],
+                    ['Health insurance', 'EBS', 'Insurance'],
+                    ['Home/renter\'s insurance', 'EBS', 'Insurance'],
+                    ['Fun', 'E', 'Expenses'],
+                    ['Entertainment', 'EBD', 'Fun'],
+                    ['Hobbies', 'EBD', 'Fun'],
+                    ['Vacation', 'EBD', 'Fun'],
+                    ['Revenue', 'R'],
+                    ['Employment income', 'RB', 'Revenue'],
+                    ['Other income', 'RB', 'Revenue'],
+                    ['Gifts from others', 'R', 'Revenue'],
+                ];
+            } else if (template == 'estate') {
+                templateValues = [
+                    ['Name','Account type(s)','Parent','Monthly Budget'], 
+                    ['Assets', 'A'],
+                    ['Cash accounts', 'A', 'Assets'],
+                    ['Cash on hand', 'AP', 'Cash accounts'],
+                    ['Checking account', 'AP', 'Cash accounts'],
+                    ['Stocks and Bonds', 'A', 'Assets'],
+                    ['Mortgages and Notes', 'A', 'Assets'],
+                    ['Real Estate', 'A', 'Assets'],
+                    ['Miscellaneous assets', 'A', 'Assets'],
+                    ['Firearms', 'A', 'Assets'],
+                    ['Liabilities', 'L'],
+                    ['Equity', 'Q'],
+                    ['Distributions to beneficiaries', 'Q', 'Equity'],
+                    ['Expenses', 'E'],
+                    ['Interest expense', 'E', 'Expenses'],
+                    ['Taxes', 'E', 'Expenses'],
+                    ['Fiduciary fees', 'E', 'Expenses'],
+                    ['Attorney, accountant, tax prep. fees', 'E', 'Expenses'],
+                    ['Revenue', 'R'],
+                    ['Receipts', 'R', 'Revenue'],
+                    ['Insurance payable to Estate', 'R', 'Revenue'],
+                    ['IRAs, 401Ks payable to Estate', 'R', 'Revenue'],
+                    ['Interest income', 'R', 'Revenue'],
+                    ['Dividends', 'R', 'Revenue'],
+                    ['Capital gain', 'R', 'Revenue']
+                ];
+            }
+        
+            let creation_response, result;
+            try {
+                creation_response = await gapi.client.sheets.spreadsheets.create({
                     properties: {
-                        title: 'Journal'
-                    }}, {
-                    properties: {
-                        title: 'Account List'
-                    }}, {
-                    properties: {
-                        title: 'Recurring Entries'
-                    }}]
-            })
-        } catch(err) {
-            flash(err.message);
-        }
-        result = creation_response.result;
-    
-        localStorage.removeItem('spreadsheetID');
-        localStorage.removeItem('spreadsheet_properties');
-        localStorage.removeItem('last_sync');
-        localStorage.removeItem('journal');
-        localStorage.removeItem('account_list');
-        localStorage.removeItem('rcrgs');
-        localStorage.removeItem('lastPageViewed');
-        localStorage.removeItem('entryQueue');
-        ssid = result.spreadsheetId;
-        localStorage.setItem('spreadsheetID', ssid);
-    
-        try {
-            response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: ssid,
-                resource: {
-                    // this value for data is where we will put the different templates
-                    data: [{
-                        range: 'Journal!A1',
-                        values: [['Date','Description','Account','Debit','Credit']]
-                    },{
-                        range:'Account List!A1',
-                        values: templateValues
-                    },{
-                        range:'Recurring Entries!A1',
-                        values: [['on / every', 'interval (#)', 'period', 'Description', 'Account', 'Debit', 'Credit']]
-                    }],
-                    valueInputOption: 'RAW'
-                },
-            });
-        } catch (err) {
-            flash(err.message);
-        }
-    
-        await bha_sync();
-        flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
-        updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
-        goToPage('add_entry');
-    })
+                        title: 'Untitled journal: Baker home accounting'
+                    },
+                    sheets: [{
+                        properties: {
+                            title: 'Journal'
+                        }}, {
+                        properties: {
+                            title: 'Account List'
+                        }}, {
+                        properties: {
+                            title: 'Recurring Entries'
+                        }}]
+                })
+            } catch(err) {
+                flash(err.message);
+            }
+            result = creation_response.result;
+        
+            localStorage.removeItem('spreadsheetID');
+            localStorage.removeItem('spreadsheet_properties');
+            localStorage.removeItem('last_sync');
+            localStorage.removeItem('journal');
+            localStorage.removeItem('account_list');
+            localStorage.removeItem('rcrgs');
+            localStorage.removeItem('lastPageViewed');
+            localStorage.removeItem('entryQueue');
+            ssid = result.spreadsheetId;
+            localStorage.setItem('spreadsheetID', ssid);
+        
+            try {
+                response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: ssid,
+                    resource: {
+                        // this value for data is where we will put the different templates
+                        data: [{
+                            range: 'Journal!A1',
+                            values: [['Date','Description','Account','Debit','Credit']]
+                        },{
+                            range:'Account List!A1',
+                            values: templateValues
+                        },{
+                            range:'Recurring Entries!A1',
+                            values: [['on / every', 'interval (#)', 'period', 'Description', 'Account', 'Debit', 'Credit']]
+                        }],
+                        valueInputOption: 'RAW'
+                    },
+                });
+            } catch (err) {
+                flash(err.message);
+            }
+        
+            await bha_sync();
+            flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
+            updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
+            goToPage('add_entry');
+        });})
 }
 
 async function saveJournalName(name) {
@@ -4590,7 +4801,11 @@ function validateSSID(input) {
         input.value = newVal;
     }
     input.size = input.value.length > 20 ? input.value.length : 20;
-    document.getElementById('open_journal_btn').disabled = false;
+    if (val === '') {
+        document.getElementById('open_journal_btn').disabled = true;
+    } else {
+        document.getElementById('open_journal_btn').disabled = false;
+    }
 }
 
 function validatePastedSSID(event) {
@@ -4601,58 +4816,61 @@ function validatePastedSSID(event) {
     document.getElementById('open_journal_btn').disabled = false;
 }
 
+function removeSsid() {
+    let ssidToRemove = document.getElementById('open_journal_select').value;
+    let message = mk('span');
+    message.textContent = `"${prevSSIDs[ssidToRemove]}" will be removed from the list. To delete the journal, do so `;
+    let link = mk('a');
+    link.textContent = 'in Google Sheets';
+    link.title = 'link to journal in Google Sheets';
+    link.href = `https://docs.google.com/spreadsheets/d/${ssidToRemove}/edit`;
+    message.append(link);
+    flash(message, () => {
+        delete prevSSIDs[ssidToRemove];
+        localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+        populatePrevSSIDs();
+    });
+}
+
+function saveSigninChanged(target) {
+    if (target.checked) {
+        localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+        localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+        if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
+        if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
+        if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
+    } else {
+        localStorage.removeItem('gapiToken');
+        localStorage.removeItem('journal');
+        localStorage.removeItem('account_list');
+        localStorage.removeItem('rcrgs');
+    }
+}
+
 let setupClickHandler = function(e) {
     if (e.target.id == 'edit_journal_name') {
-        isSignedIn(() => {
-            document.getElementById('journal_name').disabled = false;
-            e.target.style.display = 'none';
-            document.getElementById('cancel_edit_journal_name').style.display = 'inline';
-            document.getElementById('save_journal_name').style.display = 'inline';
-        });
-    }
-    if (e.target.id == 'cancel_edit_journal_name') {
-        document.getElementById('journal_name').disabled = true;
-        e.target.style.display = 'none';
-        document.getElementById('edit_journal_name').style.display = 'inline';
-        document.getElementById('save_journal_name').style.display = 'none';
-    }
-    if (e.target.id == 'save_journal_name') {
+        editJournalName(e.target);
+    } else if (e.target.id == 'cancel_edit_journal_name') {
+        cancelEditJournalName(e.target);
+    } else if (e.target.id == 'save_journal_name') {
         let name = document.getElementById('journal_name').value;
         saveJournalName(name);
+    } else if (e.target.id == 'new_ss') {
+        createSpreadsheet();
+    } else if (e.target.id == 'open_journal_btn') {
+        saveSsid();
+    } else if (e.target.id == 'remove_saved_ssid') {
+        removeSsid();
     }
-    if (e.target.id == 'setup_open_journal_instructions_toggle') {
-        if (document.getElementById('setup_open_journal_instructions').style.display != 'block') {
-            document.getElementById('setup_open_journal_instructions').style.display = 'block';
-            e.target.textContent = 'hide instructions';
-        } else {
-            document.getElementById('setup_open_journal_instructions').style.display = 'none';
-            e.target.textContent = 'see instructions';
-        }
-    }
-    if (e.target.id == 'new_ss') createSpreadsheet();
-    if (e.target.id == 'open_journal_btn') saveSsid();
 }
 
 let setupChangeHandler = function(e) {
     if (e.target.id == 'open_journal_select') {
-        let input = document.getElementById('ssid');
-        input.value = e.target.value;
-        validateSSID(input);
+        prevSSIDSelectChanged(target);
     } else if (e.target.id == 'ssid') {
         validateSSID(e.target);
     } else if (e.target.id == 'save_signin') {
-        if (e.target.checked) {
-            localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
-            localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
-            if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
-            if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
-            if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
-        } else {
-            localStorage.removeItem('gapiToken');
-            localStorage.removeItem('journal');
-            localStorage.removeItem('account_list');
-            localStorage.removeItem('rcrgs');
-        }
+        saveSigninChanged(target);
     }
 }
 
@@ -4670,6 +4888,7 @@ if (ssprops) {
     document.getElementById('journal_name').value = ssprops.properties.title;
     document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
     document.getElementById('edit_journal_name').disabled = false;
+    document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`
     document.getElementById('nav_menu').disabled = false;
     document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
     let lastPageViewed = localStorage.getItem('lastPageViewed');
@@ -4693,6 +4912,7 @@ if (localStorage.getItem('entryQueue')) {
 
 newBlankEntry('exp');
 
+document.getElementById('navbar').addEventListener('click', navbarClickHandler);
 document.getElementById('navbar').addEventListener('change', navbarChangeHandler);
 document.getElementById('content').addEventListener('click', addEntryClickHandler);
 document.getElementById('content').addEventListener('change', addEntryChangeHandler);

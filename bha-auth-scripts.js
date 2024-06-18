@@ -14,9 +14,11 @@ function checkBeforeStart() {
     if (gapiInited && gisInited){
       document.getElementById("connect_btn").style.display = 'inline';
       // FOR DEV ONLY - DOES IT BREAK THEIR NEW RULES?
-      if (localStorage.getItem('gapiTokenExp')) {
+      if (localStorage.getItem('gapiToken')) {
         document.getElementById('save_signin').checked = true;
-          if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) {
+      }
+      if (localStorage.getItem('gapiTokenExp')) {
+          if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) { // this assumes that it takes longer to init gapi and gis than it does for the browser to get to the beginning of bha-scripts.js.
               gapi.client.setToken({access_token : localStorage.getItem('gapiToken')});
               updateInterfaceForSignin();
           } else {
@@ -47,6 +49,7 @@ function gisInit() {
             client_id: CLIENT_ID,
             scope: SCOPES,
             callback: '',  // defined at request time
+            error_callback: catchSigninFailure,
         });
   gisInited = true;
   checkBeforeStart();
@@ -110,25 +113,23 @@ function isSignedIn(callback) { // returns true/false as well, can be used witho
   } 
   if (notSignedIn) {
       if (callback !== undefined) {
-          if (confirm('Must be signed in. Sign in now?')) {
-              tokenClient.callback = (resp) => {
-                  if (resp.error !== undefined) {
-                      throw(resp);
-                  }
-                  justGotToken();
-                  callback();
-                  tokenClient.callback = (resp) => { // reset to just justGotToken so we don't get a double edit or something weird if the requestaccesstoken function gets called without first redefining another callback.
-                      if (resp.error !== undefined) {
-                          throw(resp);
-                      }
-                      justGotToken();
-                  }
-                  return true;
-              }
-              tokenClient.requestAccessToken();
-          } else {
-              return false;
-          }
+          flash('Must be signed in. Sign in now?', () => {
+            tokenClient.callback = (resp) => {
+                if (resp.error !== undefined) {
+                    return false;
+                }
+                justGotToken();
+                callback();
+                tokenClient.callback = (resp) => { // reset to the normal callback in case the requestaccesstoken function gets called without first redefining another callback. Could make weird stuff happen.
+                    if (resp.error !== undefined) {
+                        throw(resp);
+                    }
+                    justGotToken();
+                }
+                return true;
+            }
+            tokenClient.requestAccessToken();
+          }, () => {return false});
       } else {
           return false;
       }
@@ -212,6 +213,22 @@ async function bha_sync() {
   }
 }
 
+function catchSigninFailure(err) {
+  if (err.type == 'popup_failed_to_open') {
+    const prompt = mk();
+    prompt.textContent = 'Try disabling your popup blocker.';
+    document.getElementById('setup_signin_instructions').append(prompt);
+    if (document.getElementById('setup_signin_instructions').style.display == 'none') flash('Try disabling your popup blocker.');
+  } else if (err.type == 'popup_closed') {
+    for (const entry_acct of [...document.getElementsByClassName('deb_acct'), ...document.getElementsByClassName('cred_acct')]) {
+      if (entry_acct.value == '***') {
+        entry_acct.value = '';
+        break;
+      }
+    }
+  }
+}
+
 async function resetViewsAfterSync() {
   while (document.getElementById('ledgers_display').firstChild) document.getElementById('ledgers_display').firstChild.remove();
   while (document.getElementById('journal').firstChild) document.getElementById('journal').firstChild.remove();
@@ -219,7 +236,6 @@ async function resetViewsAfterSync() {
   if (localStorage.getItem('lastPageViewed') == 'rcrg') populateRcrg();
   populateEditAccts();
 }
-
 
 function updateInterfaceForSignin() {
   document.getElementById('setup_signin_instructions').style.display = 'none';
@@ -232,14 +248,13 @@ function updateInterfaceForSignin() {
       document.getElementById('journal_name').value = ssprops.properties.title;
       document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
       document.getElementById('edit_journal_name').disabled = false;
+      document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`
       document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
       document.getElementById('nav_menu').disabled = false;
   }
   document.getElementById('connect_btn').textContent = 'sync';
   document.getElementById('disconnect_btn').style.display = 'inline';
 }
-
-
 
 function updateInterfaceForSignout() {
   document.getElementById('connect_btn').textContent = 'sign in';
