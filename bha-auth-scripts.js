@@ -1,5 +1,3 @@
-const CLIENT_ID = '631343190646-218if241hhb0m2dj8ems1rk0kjo80kb6.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyDo1dk4O8NDOw1gTpeWxnl6x2_NFIM2qvQ';
 const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
@@ -7,12 +5,13 @@ let tokenClient;
 let gapiInited;
 let gisInited;
 
-document.getElementById("connect_btn").style.display = 'none';
+document.getElementById('google_signin_btn').style.display = 'none';
+document.getElementById('sync_btn').style.display = 'none';
 document.getElementById("disconnect_btn").style.display = 'none';
 
 function checkBeforeStart() {
     if (gapiInited && gisInited){
-      document.getElementById("connect_btn").style.display = 'inline';
+      document.getElementById('google_signin_btn').style.display = 'inline';
       // FOR DEV ONLY - DOES IT BREAK THEIR NEW RULES?
       if (localStorage.getItem('gapiToken')) {
         document.getElementById('save_signin').checked = true;
@@ -160,20 +159,15 @@ async function bha_sync() {
   ssprops = ssprops_response.result;
   localStorage.setItem('spreadsheet_properties', JSON.stringify(ssprops));
 
-  updateInterfaceForSignin();
-
   if (!prevSSIDs.hasOwnProperty(ssid)) {
       prevSSIDs[ssid] = ssprops.properties.title;
       localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-      populatePrevSSIDs();
   } else if (prevSSIDs[ssid] != ssprops.properties.title) {
       prevSSIDs[ssid] = ssprops.properties.title;
       localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-      populatePrevSSIDs();
   }
-  if (Object.keys(prevSSIDs).length > 1) {
-      document.getElementById('setup_previous_journals').style.display = 'block';
-  }
+
+  updateInterfaceForSignin();
 
   // fetch the whole spreadsheet
   let response;
@@ -215,10 +209,7 @@ async function bha_sync() {
 
 function catchSigninFailure(err) {
   if (err.type == 'popup_failed_to_open') {
-    const prompt = mk();
-    prompt.textContent = 'Try disabling your popup blocker.';
-    document.getElementById('setup_signin_instructions').append(prompt);
-    if (document.getElementById('setup_signin_instructions').style.display == 'none') flash('Try disabling your popup blocker.');
+    flash('Try disabling your popup blocker.');
   } else if (err.type == 'popup_closed') {
     for (const entry_acct of [...document.getElementsByClassName('deb_acct'), ...document.getElementsByClassName('cred_acct')]) {
       if (entry_acct.value == '***') {
@@ -238,31 +229,27 @@ async function resetViewsAfterSync() {
 }
 
 function updateInterfaceForSignin() {
-  document.getElementById('setup_signin_instructions').style.display = 'none';
-  document.getElementById('setup_create_new_journal').style.display = 'block';
-  document.getElementById('setup_open_journal').style.display = 'block';
   document.getElementById('setup_save_signin').style.display = 'block';
+  document.getElementById('google_signin_btn').style.display = 'none';
+  document.getElementById('disconnect_btn').style.display = 'inline';
   if (ssprops) {
+      document.getElementById('sync_btn').style.display = 'inline';
       document.getElementById('top_title').textContent = ssprops.properties.title;
+      document.getElementById('navbar').style.display = 'flex';
+      document.getElementById('splash').style.display = 'none';
       document.getElementById('setup_journal_name').style.display = 'block';
       document.getElementById('journal_name').value = ssprops.properties.title;
       document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
       document.getElementById('edit_journal_name').disabled = false;
-      document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`
+      document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
       document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
-      document.getElementById('nav_menu').disabled = false;
+      populatePrevSSIDs();
   }
-  document.getElementById('connect_btn').textContent = 'sync';
-  document.getElementById('disconnect_btn').style.display = 'inline';
 }
 
 function updateInterfaceForSignout() {
-  document.getElementById('connect_btn').textContent = 'sign in';
+  document.getElementById('sync_btn').style.display = 'none';
   document.getElementById('disconnect_btn').style.display = 'none';
-  document.getElementById('setup_signin_instructions').style.display = 'block';
-  document.getElementById('setup_journal_name').style.display = 'none';
-  document.getElementById('edit_journal_name').disabled = true;
-  document.getElementById('setup_create_new_journal').style.display = 'none';
-  document.getElementById('setup_open_journal').style.display = 'none';
   document.getElementById('setup_save_signin').style.display = 'none';
+  document.getElementById('google_signin_btn').style.display = 'inline';
 }

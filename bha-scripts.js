@@ -15,6 +15,8 @@
 
 // To-do: 
 
+// add rcrg flag to journal entry when 'make recurring' is selected
+// notify if empty ledger, journal, recurrings, edit accts, 
 // keyboard navigation
 // journal entries correctly displaying chronological by date, but incorrectly reversing the order of entries on each date
 // change doIf_StillSynced and batchUpdateValues functions to promise-based rather than callback
@@ -407,7 +409,7 @@ function closeFlashConf() {
     document.getElementById('flash_conf').textContent = '';
 }
 
-let navbarClickHandler = function(e) {
+let flashClickHandler = function(e) {
     if (e.target.id == 'flash_msg_close') {
         closeFlashMsg();
     } else if (e.target.id == 'flash_conf_no') {
@@ -4507,7 +4509,6 @@ function populatePrevSSIDs() {
     } else {
         document.getElementById('setup_previous_journals').style.display = 'none';
     }
-
 }
 
 function editJournalName(target) {
@@ -4546,12 +4547,15 @@ function checkAcceptLicense(callback) {
         s1.textContent = 'By continuing, you accept the ';
         const terms = mk('a');
         terms.textContent = 'terms of use';
-        terms.title = 'terms of use';
+        terms.title = 'plain text Apach License, Version 2.0';
+        terms.target = '_blank';
         terms.href = 'LICENSE.txt';
         const s2 = mk('span');
         s2.textContent = ' and ';
         const priv = mk('a');
         priv.textContent = 'privacy policy';
+        priv.title = "Privacy Policy";
+        priv.target = '_blank';
         priv.href = 'privacy-policy.html';
         confirmation.append(s1, terms, s2, priv);
         flash(confirmation, () => {
@@ -4689,11 +4693,11 @@ function createSpreadsheet() {
                 ];
             }
         
-            let creation_response, result;
+            let creation_response;
             try {
                 creation_response = await gapi.client.sheets.spreadsheets.create({
                     properties: {
-                        title: 'Untitled journal: Baker home accounting'
+                        title: 'Untitled journal: Baker Home Accounting'
                     },
                     sheets: [{
                         properties: {
@@ -4704,12 +4708,13 @@ function createSpreadsheet() {
                         }}, {
                         properties: {
                             title: 'Recurring Entries'
-                        }}]
+                        }
+                    }]
                 })
             } catch(err) {
                 flash(err.message);
             }
-            result = creation_response.result;
+            ssprops = creation_response.result;
         
             localStorage.removeItem('spreadsheetID');
             localStorage.removeItem('spreadsheet_properties');
@@ -4719,14 +4724,39 @@ function createSpreadsheet() {
             localStorage.removeItem('rcrgs');
             localStorage.removeItem('lastPageViewed');
             localStorage.removeItem('entryQueue');
-            ssid = result.spreadsheetId;
+            ssid = ssprops.spreadsheetId;
             localStorage.setItem('spreadsheetID', ssid);
+            localStorage.setItem('spreadsheet_properties', JSON.stringify(ssprops));
         
             try {
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: ssid,
+                    requests: [{
+                        addProtectedRange: {
+                            protectedRange: {
+                                range: {sheetId: ssprops.sheets[0].properties.sheetId},
+                                warningOnly: true
+                            }
+                        }
+                    },{
+                        addProtectedRange: {
+                            protectedRange: {
+                                range: {sheetId: ssprops.sheets[1].properties.sheetId},
+                                warningOnly: true
+                            }
+                        }
+                    },{
+                        addProtectedRange: {
+                            protectedRange: {
+                                range: {sheetId: ssprops.sheets[2].properties.sheetId},
+                                warningOnly: true
+                            }
+                        }
+                    }]
+                });
                 response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                     spreadsheetId: ssid,
                     resource: {
-                        // this value for data is where we will put the different templates
                         data: [{
                             range: 'Journal!A1',
                             values: [['Date','Description','Account','Debit','Credit']]
@@ -4744,7 +4774,10 @@ function createSpreadsheet() {
                 flash(err.message);
             }
         
-            await bha_sync();
+            prevSSIDs[ssid] = ssprops.properties.title;
+            updateInterfaceForSignin();
+            let lastSync = `${mos[today.getMonth()]} ${today.getDate()}`;
+            document.getElementById('last_sync').textContent = `synced ${lastSync} `;
             flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
             updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
             goToPage('add_entry');
@@ -4788,16 +4821,16 @@ async function saveJournalName(name) {
             bha_sync();
         } catch(err) {
             flash(err.message);
-            return;
+            throw err;
         }
 
     })
 }
 
 function validateSSID(input) {
-    let val = input.value;
+    const val = input.value;
     if (val.includes('d/') && val.includes('/edit')) {
-        let newVal = val.substring(val.indexOf('d/') + 2, val.indexOf('/edit'));
+        const newVal = val.substring(val.indexOf('d/') + 2, val.indexOf('/edit'));
         input.value = newVal;
     }
     input.size = input.value.length > 20 ? input.value.length : 20;
@@ -4828,6 +4861,33 @@ function removeSsid() {
     flash(message, () => {
         delete prevSSIDs[ssidToRemove];
         localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+        if (ssid == ssidToRemove) {
+            localStorage.removeItem('spreadsheetID');
+            localStorage.removeItem('spreadsheet_properties');
+            localStorage.removeItem('last_sync');
+            localStorage.removeItem('journal');
+            localStorage.removeItem('account_list');
+            localStorage.removeItem('rcrgs');
+            localStorage.removeItem('lastPageViewed');
+            localStorage.removeItem('entryQueue');
+            ssid = '';
+            ssprops = '';
+            document.getElementById('top_title').textContent = '';
+            document.getElementById('setup_journal_name').style.display = 'none';
+            document.getElementById('journal_name').value = '';
+            document.getElementById('journal_name').size = 20;
+            document.getElementById('edit_journal_name').disabled = true;
+            document.getElementById('spreadsheet_link').href = '';
+            document.getElementsByTagName('title')[0].textContent = '\u0071\u035C\u0298 Baker Home Accounting';
+            if (Object.keys(prevSSIDs).length == 1) {
+                id = Object.keys(prevSSIDs)[0];
+                document.getElementById('ssid').value = id;
+                title = prevSSIDs[id];
+                flash(`Sync to journal "${title}," spreadsheet ID ${id}?`, saveSsid);
+            } else {
+                document.getElementById('ssid').value = '';
+            }
+        }
         populatePrevSSIDs();
     });
 }
@@ -4866,11 +4926,11 @@ let setupClickHandler = function(e) {
 
 let setupChangeHandler = function(e) {
     if (e.target.id == 'open_journal_select') {
-        prevSSIDSelectChanged(target);
+        prevSSIDSelectChanged(e.target);
     } else if (e.target.id == 'ssid') {
         validateSSID(e.target);
     } else if (e.target.id == 'save_signin') {
-        saveSigninChanged(target);
+        saveSigninChanged(e.target);
     }
 }
 
@@ -4885,11 +4945,13 @@ const setupPasteHandler = function(e) {
 
 if (ssprops) {
     document.getElementById('top_title').textContent = ssprops.properties.title;
+    document.getElementById('navbar').style.display = 'flex';
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('setup_journal_name').style.display = 'block';
     document.getElementById('journal_name').value = ssprops.properties.title;
     document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
     document.getElementById('edit_journal_name').disabled = false;
-    document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`
-    document.getElementById('nav_menu').disabled = false;
+    document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
     document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
     let lastPageViewed = localStorage.getItem('lastPageViewed');
     if (lastPageViewed) {
@@ -4912,7 +4974,7 @@ if (localStorage.getItem('entryQueue')) {
 
 newBlankEntry('exp');
 
-document.getElementById('navbar').addEventListener('click', navbarClickHandler);
+document.getElementById('flash').addEventListener('click', flashClickHandler);
 document.getElementById('navbar').addEventListener('change', navbarChangeHandler);
 document.getElementById('content').addEventListener('click', addEntryClickHandler);
 document.getElementById('content').addEventListener('change', addEntryChangeHandler);
