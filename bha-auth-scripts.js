@@ -4,20 +4,24 @@ const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 let tokenClient;
 let gapiInited;
 let gisInited;
+let today;
+
+//let tokenExpirationInMS;
+let tokenExpirationInMS = localStorage.getItem('gapiTokenExp') ? parseInt(localStorage.getItem('gapiTokenExp')) : 0; // this might break their rules. Can i keep the hourlong token in localStorage? If not, can I do it if I add a "keep my signed in" option that is unchecked by default?
 
 document.getElementById('google_signin_btn').style.display = 'none';
 document.getElementById('sync_btn').style.display = 'none';
-document.getElementById("disconnect_btn").style.display = 'none';
+document.getElementById("signout_btn").style.display = 'none';
 
 function checkBeforeStart() {
-    if (gapiInited && gisInited){
+    if (gapiInited && gisInited && today){
       document.getElementById('google_signin_btn').style.display = 'inline';
       // FOR DEV ONLY - DOES IT BREAK THEIR NEW RULES?
       if (localStorage.getItem('gapiToken')) {
         document.getElementById('save_signin').checked = true;
       }
       if (localStorage.getItem('gapiTokenExp')) {
-          if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) { // this assumes that it takes longer to init gapi and gis than it does for the browser to get to the beginning of bha-scripts.js.
+          if (today.getTime() < parseInt(localStorage.getItem('gapiTokenExp'))) { // I'm assuming it takes longer to init gapi and gis than for the browser to get to the beginning of bha-scripts.js, where today is defined.
               gapi.client.setToken({access_token : localStorage.getItem('gapiToken')});
               updateInterfaceForSignin();
           } else {
@@ -27,6 +31,9 @@ function checkBeforeStart() {
       // END FOR DEV ONLY
     }
 }
+
+today = new Date();
+checkBeforeStart();
 
 function gapiInit() {
   gapi.client.init({
@@ -221,17 +228,18 @@ function catchSigninFailure(err) {
 }
 
 async function resetViewsAfterSync() {
+  updateEntryOpts(document.getElementById('add_entry').firstChild, JSON.parse(document.getElementById('add_entry').firstChild.dataset.origentry).type ? JSON.parse(document.getElementById('add_entry').firstChild.dataset.origentry).type : '');
   while (document.getElementById('ledgers_display').firstChild) document.getElementById('ledgers_display').firstChild.remove();
   while (document.getElementById('journal').firstChild) document.getElementById('journal').firstChild.remove();
   while (document.getElementById('eom_rev').firstChild) document.getElementById('eom_rev').firstChild.remove();
-  if (localStorage.getItem('lastPageViewed') == 'rcrg') populateRcrg();
+  populateRcrg();
   populateEditAccts();
 }
 
 function updateInterfaceForSignin() {
   document.getElementById('setup_save_signin').style.display = 'block';
   document.getElementById('google_signin_btn').style.display = 'none';
-  document.getElementById('disconnect_btn').style.display = 'inline';
+  document.getElementById('signout_btn').style.display = 'inline';
   if (ssprops) {
       document.getElementById('sync_btn').style.display = 'inline';
       document.getElementById('top_title').textContent = ssprops.properties.title;
@@ -249,7 +257,7 @@ function updateInterfaceForSignin() {
 
 function updateInterfaceForSignout() {
   document.getElementById('sync_btn').style.display = 'none';
-  document.getElementById('disconnect_btn').style.display = 'none';
+  document.getElementById('signout_btn').style.display = 'none';
   document.getElementById('setup_save_signin').style.display = 'none';
   document.getElementById('google_signin_btn').style.display = 'inline';
 }

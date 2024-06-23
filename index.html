@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>q͜ʘ Baker Home Accounting</title>
-        <link rel="stylesheet" href="bha-style.css?5">
+        <link rel="stylesheet" href="bha-style.css?6">
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
@@ -36,7 +36,7 @@
                     </div>
                 </button>
                 <span class="fakea" id="sync_btn" onclick="handleConnectClick()">sync</span>
-                <span class="fakea" id="disconnect_btn" onclick="revokeToken()">disconnect</span>
+                <span class="fakea" id="signout_btn" onclick="revokeToken()">sign out</span>
             </span>
         </div>
         <div id="flash">
@@ -96,6 +96,7 @@
                     <button id="edit_journal_name">edit</button>
                     <button id="cancel_edit_journal_name">cancel</button>
                     <button id="save_journal_name">save</button>
+                    <button id="disconnect_btn">disconnect</button>
                     <div id="setup_spreadsheet_link">
                         Change sharing permissions and other settings <a id="spreadsheet_link" title="View journal in Google Sheets">in Google Sheets</a>.
                     </div>
@@ -137,16 +138,17 @@
                 <div id="footer_firstline">
                     <span id="last_sync">last synced: n/a </span>
                     <a title="Privacy Policy" href="privacy-policy.html">Privacy Policy</a>
+                    <a href="mailto:bha-support@wbakerlegal.com" title="email bha-support@wbakerlegal.com">Contact</a>
                     <!--<a title="Support q͜ʘ’s development" href="donate.html">Donate</a>-->
                     <!--<select id="localization"><option value="en-us">English</option></select>-->
                 </div>
                 <div id="footer_copyright">&copy; 2024 William Baker. Google Sheets is a trademark of Google LLC. This software is licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may view a copy of the License <a href="LICENSE.txt" title="plain text Apache-2.0 license">here</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
             </div>
         </div>
-        <script src="config.js?1"></script>
-        <script src="bha-auth-scripts.js?5"></script>
+        <script src="config.js"></script>
+        <script src="bha-auth-scripts.js?6"></script>
         <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoad()"></script>
         <script async defer src="https://accounts.google.com/gsi/client" onload="gisInit()"></script>
-        <script defer src="bha-scripts.js?7"></script>
+        <script defer src="bha-scripts.js?9"></script>
     </body>
 </html>

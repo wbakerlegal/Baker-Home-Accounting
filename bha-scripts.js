@@ -15,8 +15,9 @@
 
 // To-do: 
 
-// add rcrg flag to journal entry when 'make recurring' is selected
-// notify if empty ledger, journal, recurrings, edit accts, 
+// add error classes to rcrg inputs on recurring validation
+// split out database connection from updateinterfaceforsignin and -out functions, looking at localStorage, global vars, and display elements
+// notify if empty ledger, journal, recurrings, edit accts
 // keyboard navigation
 // journal entries correctly displaying chronological by date, but incorrectly reversing the order of entries on each date
 // change doIf_StillSynced and batchUpdateValues functions to promise-based rather than callback
@@ -36,12 +37,12 @@ in Journal!F1, Account List!E1, and
 Recurring Entries!H1 notifying user of data 
 persistency in that and following columns. 
 -- add notice to all templates:
----- Journal: USER NOTICE: Do not change any data in Columns A through E. q͜ʘ does not access data in columns F and following. Rows may be inserted and deleted. Do not keep any information in columns F and following. 
----- Account List: USER NOTICE: Do not change any data in Columns A through D. q͜ʘ does not access data in columns E and following, and does not alter any data in those columns.
----- journal: USER NOTICE: Do not change any data in Columns A through G. q͜ʘ does not access data in columns H and following, and does not alter any data in those columns.
--- change edit accts and rcrgs functions (editAcctSaveNewAcct, editAcctDeleteAcct, saveRcrg, deleteRcrg) to edit the global arrays then rewrite spreadsheet contents without insertrows or deleterows. First write the journal entry delete function before changing rcrg's stable function
+---- Journal: USER NOTICE: Do not change any data in Columns A through E. q͜ʘ may move or delete data in columns F and following. Do not keep any information in columns F and following. 
+---- Account List: USER NOTICE: Do not change any data in Columns A through D. q͜ʘ does not access data in columns E and following, and does not alter data in those columns.
+---- journal: USER NOTICE: Do not change any data in Columns A through G. q͜ʘ does not access data in columns H and following, and does not alter data in those columns.
+-- change edit accts and rcrgs functions (editAcctSaveNewAcct, editAcctDeleteAcct, saveRcrg, deleteRcrg) to edit the global arrays then rewrite spreadsheet contents without insertrows or deleterows.
 */
-// Google calendar integration for recurring entries. Or can I just send an email and have gmail interpret it correctly?
+// Google calendar integration for recurring entries.
 // social integration: create and share templates
 /* for link from calendar: how to embed user data safely?
 */
@@ -55,7 +56,10 @@ In ledgers:
 --- add annual closing and opening entries for A/L/Q accounts to December EOM review
 */
 /*
-multi-journal operations. For example, my home budget and sole proprietorship are separate journals. Have an owner draw in the business show up as income in the home budget.
+multi-journal operations. 
+For example, home budget and sole proprietorship as separate journals. 
+Have an owner draw in the business show up as income in the home budget. 
+(but not 2d tax event! consider presentation)
 */
 /*
 check writing function: export docx files using jszip. Or generate a pdf?
@@ -64,7 +68,8 @@ in Add Entry, show option to create check if a C account is selected to credit
 popunder: check no., payee, amt(#), amt(written), memo. Have character limits.
 */
 
-let today = new Date();
+//-------------
+
 
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const mos = ["Jan.","Feb.","March","April","May","June","July","Aug.","Sep.","Oct.","Nov.","Dec."];
@@ -89,11 +94,8 @@ if (localStorage.getItem('spreadsheet_properties')) ssprops = JSON.parse(localSt
 let accts = localStorage.getItem('account_list') ? JSON.parse(localStorage.getItem('account_list')) : [];
 
 //let journal; 
-//let tokenExpirationInMS;
 // FOR DEVELOPMENT ONLY:
 let journal = localStorage.getItem('journal') ? JSON.parse(localStorage.getItem('journal')) : []; // this might get too big
-
-let tokenExpirationInMS = localStorage.getItem('gapiTokenExp') ? parseInt(localStorage.getItem('gapiTokenExp')) : 0; // this might break their rules. Can i keep the hourlong token in localStorage? If not, can I do it if I add a "keep my signed in" option that is unchecked by default?
 
 function checkLocalStorageSize() { // to test how big the journal gets
     let _lsTotal = 0;
@@ -122,10 +124,17 @@ function flash(message, callback, cancel_callback) {
         flashContent.textContent = message;
     } else flashContent = message;
     if (!callback) {
-        while (document.getElementById('flash_msg').firstChild) document.getElementById('flash_msg').firstChild.remove();
-        document.getElementById('flash_msg').append(flashContent);
-        document.getElementById('flash_msg_box').style.display = 'flex';
+        document.getElementById('flash_conf_box').style.display = 'none';
+        if (!message) {
+            document.getElementById('flash_msg').textContent = '';
+            document.getElementById('flash_msg_box').style.display = 'none';
+        } else {
+            while (document.getElementById('flash_msg').firstChild) document.getElementById('flash_msg').firstChild.remove();
+            document.getElementById('flash_msg').append(flashContent);
+            document.getElementById('flash_msg_box').style.display = 'flex';
+        }
     } else {
+        document.getElementById('flash_msg_box').style.display = 'none';
         while (document.getElementById('flash_conf').firstChild) document.getElementById('flash_conf').firstChild.remove();
         document.getElementById('flash_conf').append(flashContent);
         function resetFlashConfBtns() {
@@ -832,20 +841,6 @@ function getEntryInputElements(entry_container) {
     return els;
 }
 
-function entryAmtChanged(target) {
-    target.value = parseFloat(target.value) ? parseFloat(target.value).toFixed(2) : '';
-    const entry_container = target.parentElement.parentElement.parentElement;
-    const els = getEntryInputElements(entry_container);
-    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
-        if (target.classList.contains('deb_amt')) {
-            els.cred_amts[0].value = target.value;  // we already sanitized the target's value above
-        } else {
-            els.deb_amts[0].value = target.value;
-        }
-    }
-    entryAmtAutoComplete(els);
-}
-
 function entryAcctChanged(target) {
     if (target.value == '***') {
         if (!isSignedIn(() => {
@@ -865,13 +860,23 @@ function entryAcctChanged(target) {
     }
 }
 
-function entryAmtAutoComplete(els) {
-    els.debits.classList.remove('popunder');
-    els.credits.classList.remove('popunder');
+function entryAmtChanged(target) {
+    target.value = parseFloat(target.value) ? parseFloat(target.value).toFixed(2) : '';
+    const entry_container = target.parentElement.parentElement.parentElement;
+    const els = getEntryInputElements(entry_container);
+    if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
+        if (target.classList.contains('deb_amt')) {
+            els.cred_amts[0].value = target.value;  // we already sanitized the target's value above
+        } else {
+            els.deb_amts[0].value = target.value;
+        }
+    }
+    entryAmtUpdateDisplay(els);
+}
 
-    // clear any previous autocomplete:
-    if (document.getElementById('split_entry_difference')) document.getElementById('split_entry_difference').remove();
-    
+function entryAmtUpdateDisplay(els) {
+    els.debits.classList.remove('popunder');
+    els.credits.classList.remove('popunder');    
     if (els.deb_amts.length == 1 && els.cred_amts.length == 1) {
         let amt = parseFloat(els.deb_amts[0].value ? els.deb_amts[0].value : 0); // we already made deb and cred amt the same in the event dispatcher
         if (amt != 0) {
@@ -889,24 +894,18 @@ function entryAmtAutoComplete(els) {
         els.debits.classList.remove('error');
         els.credits.classList.remove('error');
     } else {
-        // total everything up and see if there's only one empty amount
         let debits = 0;
         let credits = 0;
-        let emptyAmts = 0;
         for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
             if (i < els.deb_amts.length) {
-                els.deb_amts[i].setAttribute('list', null);
                 if (!parseFloat(els.deb_amts[i].value)) {
-                    emptyAmts++;
                 } else {
                     debits += parseFloat(els.deb_amts[i].value);
                     els.deb_amts[i].classList.remove('error');
                 }
             } else {
                 const j = i - els.deb_amts.length;
-                els.cred_amts[j].setAttribute('list', null);
                 if (!parseFloat(els.cred_amts[j].value)) {
-                    emptyAmts++;
                 } else {
                     credits += parseFloat(els.cred_amts[j].value);
                     els.cred_amts[j].classList.remove('error');
@@ -923,31 +922,73 @@ function entryAmtAutoComplete(els) {
             els.debits.classList.remove('error');
             els.credits.classList.remove('error');
         }
+    }
+}
 
-        // create autocomplete
-        if (emptyAmts == 1) {
-            let balance = Math.abs(debits - credits).toFixed(2);
-            let datalist = mk('datalist');
-            datalist.id = 'split_entry_difference';
-            let amt = mk('option');
-            amt.value = balance;
-            datalist.append(amt);
-            els.container.append(datalist);
-            for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
-                if (i < els.deb_amts.length) {
-                    if (!parseFloat(els.deb_amts[i].value)) {
-                        els.deb_amts[i].setAttribute('list', 'split_entry_difference');
-                        break;
-                    }
+function entryAmtFocusin(e) {
+    if (parseFloat(e.target.value) === 0 && e.target.value.includes('.')) {
+        e.target.value = '';
+    }
+    const entry_line = e.target.parentElement.parentElement.parentElement;
+    const els = getEntryInputElements(entry_line);
+    if (els.deb_amts.length != 1 || els.cred_amts.length != 1) {
+        let debits = 0;
+        let credits = 0;
+        let emptyAmts = 0;
+        for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
+            if (i < els.deb_amts.length) {
+                if (els.deb_amts[i] === e.target) continue;
+                //els.deb_amts[i].setAttribute('list', null);
+                if (!parseFloat(els.deb_amts[i].value)) {
+                    emptyAmts++;
                 } else {
-                    if (!parseFloat(els.cred_amts[i - els.deb_amts.length].value)) {
-                        els.cred_amts[i - els.deb_amts.length].setAttribute('list', 'split_entry_difference');
-                        break;
-                    }
+                    debits += parseFloat(els.deb_amts[i].value);
+                }
+            } else {
+                const j = i - els.deb_amts.length;
+                if (els.cred_amts[j] === e.target) continue;
+                //els.cred_amts[j].setAttribute('list', null);
+                if (!parseFloat(els.cred_amts[j].value)) {
+                    emptyAmts++;
+                } else {
+                    credits += parseFloat(els.cred_amts[j].value);
                 }
             }
         }
+        let balanced = e.target.classList.contains('deb_amt') ? (debits + parseFloat(e.target.value)).toFixed(2) == credits.toFixed(2) : debits.toFixed(2) == (credits + parseFloat(e.target.value)).toFixed(2);
+        if (emptyAmts == 0 && !balanced) {
+            const balance = Math.abs(debits - credits).toFixed(2);
+            const wrap = mk();
+            wrap.id = 'entry_auto_amount_btn_wrap';
+            if (e.target.classList.contains('deb_amt')) {
+                wrap.classList.add('nogap');
+            }
+            const btn = mk('button');
+            btn.id = 'entry_auto_amount_btn';
+            btn.textContent = balance;
+            btn.dataset.amount = balance;
+            wrap.append(btn);
+            e.target.before(wrap);
+            if (e.target.classList.contains('cred_amt')) e.target.classList.add('nomargin');
+        }
     }
+}
+
+function entryAmtFocusout(e) {
+    setTimeout(() => {
+        //if (e.target.previousElementSibling.id == 'entry_auto_amount_btn_wrap') e.target.previousElementSibling.remove();
+        if (e.target.previousElementSibling.id == 'entry_auto_amount_btn_wrap' && document.activeElement.id != 'entry_auto_amount_btn') {
+            e.target.previousElementSibling.remove();
+            if (e.target.classList.contains('cred_amt')) e.target.classList.remove('nomargin');
+        }
+    },75);
+}
+
+function fillEntryAmt(button) {
+    button.parentElement.nextElementSibling.value = button.dataset.amount;
+    entryAmtUpdateDisplay(getEntryInputElements(button.parentElement.parentElement.parentElement.parentElement));
+    if (button.parentElement.nextElementSibling.classList.contains('cred_amt')) button.parentElement.nextElementSibling.classList.remove('nomargin');
+    button.parentElement.remove();
 }
 
 function updateEntryOpts(entry_line, _type) {
@@ -1089,7 +1130,7 @@ function subValidateAcctNames(els, errorsArr, quiet) {
 }
 
 function subValidateEntryAmts(els, errorsArr, quiet) {
-    entryAmtAutoComplete(els); // this removes any error class and locks/unlocks
+    entryAmtUpdateDisplay(els); // this removes any error class and locks/unlocks
     let debits = 0;
     let credits = 0;
     let missingAmt = false;
@@ -1171,12 +1212,14 @@ function addToEntryQueue(entries) {
 
 async function uploadEntryQueue(callback) {
     let queued = localStorage.getItem('entryQueue') ? JSON.parse(localStorage.getItem('entryQueue')) : [];
+    let n = processJournal(queued).length;
     let success = function (response) {
         localStorage.removeItem('entryQueue');
-        flash('Entry saved')
+        flash(`Entr${n > 1 ? 'ies' : 'y'} saved`);
         if (callback) callback(response);
     }
-    if (queued.length > 0 && isSignedIn()) {
+    if (n > 0 && isSignedIn()) {
+        flash(`saving entr${n > 1 ? 'ies' : 'y'}...`);
         appendValues(ssid, "Journal!A1", 'RAW', queued, success);
     }
 }
@@ -1200,7 +1243,7 @@ function entryAddAcctClk(entry_container, side) {
     }
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
-    entryAmtAutoComplete(els);
+    entryAmtUpdateDisplay(els);
     els.split.style.display = 'inline';
     els.add_deb.style.display = 'none';
     els.add_cred.style.display = 'none';
@@ -1211,7 +1254,7 @@ function entryRemAcctClk(entry_acct_div) {
     entry_acct_div.remove();
     let els = getEntryInputElements(entry_container);
     showHideEntryAcctBtns(els);
-    entryAmtAutoComplete(els);
+    entryAmtUpdateDisplay(els);
 }
 
 function splitEntry(entry_line) {
@@ -1225,12 +1268,6 @@ function submitEntry(entry_container) {
     if (validateEntryInputs(entry_container)) {
         let els = getEntryInputElements(entry_container);
         let entries = [];
-        let desc;
-        if (els.entry_data.hasOwnProperty('rcrgindex')) {
-            desc = els.desc.value + ' RCRG' + els.entry_data.rcrgindex;
-        } else {
-            desc = els.desc.value;
-        }
         for (let i = 0; i < els.deb_accts.length + els.cred_accts.length; i++) {
             let entry = [
                 els.date.value, 
@@ -1293,6 +1330,8 @@ let addEntryClickHandler = function(e) {
     } else if (e.target.classList.contains('split_entry')) {
         let entry_container = e.target.parentElement.parentElement;
         splitEntry(entry_container);
+    } else if (e.target.id == 'entry_auto_amount_btn') {
+        fillEntryAmt(e.target);
     }
 }
 
@@ -1306,9 +1345,15 @@ let addEntryChangeHandler = function(e) {
     if ((e.target.classList.contains('desc') || e.target.classList.contains('date') || e.target.classList.contains('deb_acct') || e.target.classList.contains('cred_acct')) && e.target.value) e.target.classList.remove('error');
 }
 
-let addEntryFocusHandler = function(e) {
-    if ((e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) && parseFloat(e.target.value) === 0 && e.target.value.includes('.')) {
-        e.target.value = '';
+let addEntryFocusinHandler = function(e) {
+    if (e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) {
+        entryAmtFocusin(e);
+    }
+}
+
+let addEntryFocusoutHandler = function(e) {
+    if (e.target.classList.contains('deb_amt') || e.target.classList.contains('cred_amt')) {
+        entryAmtFocusout(e);
     }
 }
 
@@ -1348,10 +1393,11 @@ function processJournal(raw, startingSSRowIndex1) {
                     if (row.length == 1 || (row.length > 1 && !row[1].includes('E'))) {
                         isExp = false;
                     }
-                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes['L']))) {
+                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes('L')))) {
                         isInc = false;
                         isTfr = false;
                     }
+                    break;
                 }
             }
         }
@@ -1361,10 +1407,11 @@ function processJournal(raw, startingSSRowIndex1) {
                     if (row.length == 1 || (row.length > 1 && !row[1].includes('R'))) {
                         isInc = false;
                     }
-                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes['L']))) {
+                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes('L')))) {
                         isExp = false;
                         isTfr = false;
                     }
+                    break;
                 }
             }
         }
@@ -1583,7 +1630,7 @@ function editEntry(entry_line) {
         els.rem_cred_acct_btns[i].disabled = false;
         els.cred_amts[i].disabled = false;
     }
-    entryAmtAutoComplete(els); // in case it was last edited missing an amount
+    entryAmtUpdateDisplay(els); // in case it was last edited missing an amount
 }
 
 function cancelEditEntry(entry_line) {
@@ -1672,7 +1719,7 @@ function deleteEntry(entry_line) {
         doIfEntryStillSynced(entry_line, () => {
             const els = getEntryInputElements(entry_line);
             const origEntry = els.entry_data;
-            flash(`Confirm to delete entry "${orig.desc}" from ${months[parseInt(orig.date.substring(5,7)) - 1]} ${parseInt(orig.date.substring(8))}, ${orig.date.substring(0,4)}?`, () => {
+            flash(`Confirm to delete entry "${origEntry.desc}" from ${months[parseInt(origEntry.date.substring(5,7)) - 1]} ${parseInt(origEntry.date.substring(8))}, ${origEntry.date.substring(0,4)}?`, () => {
                 let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
                 let startIndex = origEntry.start_sheet_index1 - 1; // deleteRows is index 0
                 let endIndex = startIndex + noRows;
@@ -1783,7 +1830,7 @@ function processRcrgs(raw, startingSSRowIndex1) {
                     if (row.length == 1 || (row.length > 1 && !row[1].includes('E'))) {
                         isExp = false;
                     }
-                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes['L']))) {
+                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes('L')))) {
                         isInc = false;
                         isTfr = false;
                     }
@@ -1796,7 +1843,7 @@ function processRcrgs(raw, startingSSRowIndex1) {
                     if (row.length == 1 || (row.length > 1 && !row[1].includes('R'))) {
                         isInc = false;
                     }
-                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes['L']))) {
+                    if (row.length == 1 || (row.length > 1 && (!row[1].includes('A') && !row[1].includes('L')))) {
                         isExp = false;
                         isTfr = false;
                     }
@@ -2346,7 +2393,7 @@ function validateRcrgLine(line, quiet) {
 
     subValidateDesc(els.desc, errors, quiet);
     //subValidateEntryAmts(els, errors, quiet);
-    entryAmtAutoComplete(els);
+    entryAmtUpdateDisplay(els);
     showHideEntryAcctBtns(els);
     
     if (errors.length > 0 && !quiet) {
@@ -2454,9 +2501,10 @@ async function submitNewRcrg(rcrg_line) {
         if (validateRcrgLine(rcrg_line, false)) {
             let rcrgs_response;
             try {
+                flash('getting recurring index number...');
                 rcrgs_response = await gapi.client.sheets.spreadsheets.values.batchGet({
                     spreadsheetId: ssid,
-                    ranges: ['Recurring Entries!A1:G']
+                    ranges: ['Recurring Entries!A2:G']
                 });
             } catch(err) {
                 flash('Error' + err.toString());
@@ -2490,12 +2538,42 @@ async function submitNewRcrg(rcrg_line) {
                 }
                 entries.push(entry);
             }
-            appendValues(ssid, 'Recurring Entries!A1', 'RAW', entries, async function() {
-                await bha_sync();
+            let ranges = [`Recurring Entries!A${rcrgs.length + 2}`]; // +1 for header row, +1 to go next
+            let values = [entries];
+
+            let srcEntry;
+            // check if prev line needs to get rcrg flag -- occurs when 'make recurring' is clicked in a journal entry view.
+            if (rcrg_line.previousElementSibling && rcrg_line.previousElementSibling.classList.contains('entry') && !rcrg_line.previousElementSibling.classList.contains('rcrg_template')) {
+                const srcEntryEl = rcrg_line.previousElementSibling;
+                srcEntry = JSON.parse(srcEntryEl.dataset.origentry);
+                await doIfEntryStillSynced(srcEntryEl, () => {
+                    for (let i = 0; i < srcEntry.deb_accts.length + srcEntry.cred_accts.length; i++) {
+                        ranges.push(`Journal!B${srcEntry.start_sheet_index1 + i}`);
+                        values.push([[`${srcEntry.desc} RCRG${index}`]]);
+                    }
+                });                
+            }
+
+            flash('saving recurring template...');
+
+            batchUpdateValues(ranges, values, async function() { 
+                for (const line of entries) {
+                    rcrgs.push(line);
+                }
+                if (srcEntry) {
+                    srcEntry.rcrgindex = index;
+                    rcrg_line.previousElementSibling.dataset.origentry = JSON.stringify(srcEntry);
+                    getEntryInputElements(rcrg_line.previousElementSibling).mkrcrg.style.display = 'none';
+                    for (let i = 0; i < srcEntry.deb_accts.length + srcEntry.cred_accts.length; i++) {
+                        console.log(srcEntry);
+                        let journalRow = journal[srcEntry.start_sheet_index1 + i - 2]; // -1 for header row, -1 for index 0
+                        journalRow[1] = `${journalRow[1]} RCRG${index}`;
+                    }
+                }
                 flash('Recurring template saved');
                 rcrg_line.remove()
                 populateRcrg();
-            });
+            })
         }
     })
 }
@@ -2553,7 +2631,7 @@ function editRcrg(rcrg_line) {
             els.rem_cred_acct_btns[i].disabled = false;
             els.cred_amts[i].disabled = false;
         }
-        entryAmtAutoComplete(els); // in case it was last edited missing an amount
+        entryAmtUpdateDisplay(els); // in case it was last edited missing an amount
     })
 }
 
@@ -2586,7 +2664,7 @@ function cancelRcrg(rcrg_line) {
     }
 }
 
-async function saveRcrg(rcrg_line) { 
+async function saveRcrg(rcrg_line) { // rewrite to allow data persistency in columns H+; give user feedback when awaiting
     isSignedIn(async () => {
         if (validateRcrgLine(rcrg_line)) {
             doIfRcrgStillSynced(rcrg_line, async () => {
@@ -2658,7 +2736,7 @@ function deleteRcrg(rcrg_line) {
             let no_entries = 0;
             let indexRE = new RegExp(`RCRG${origEntry.index}$`);
             for (const row of journal) if (indexRE.test(row[1])) no_entries++;
-            if (no_entries > 0) confirmMsg += ` This will also remove the recurring flag from ${no_entries} journal entries`;
+            if (no_entries > 0) confirmMsg += ` This will also remove the recurring flag from ${no_entries} journal entry rows`;
             
             flash(confirmMsg, () => {
                 let noRows = origEntry.deb_accts.length + origEntry.cred_accts.length;
@@ -3229,6 +3307,7 @@ function editAcctCancelEdit(edit_acct_line) {
 async function editAcctSaveAcct(edit_acct_line) {
     isSignedIn(async () => {
         let values;
+        flash('making sure account list is synced...');
         try {
             let response = await gapi.client.sheets.spreadsheets.values.batchGet({
                 spreadsheetId: ssid,
@@ -3244,14 +3323,14 @@ async function editAcctSaveAcct(edit_acct_line) {
             if (sameLength == false || acctNamesMatch == false) {
                 accts = liveAccts;
                 populateEditAccts();
-                throw new Error('Account list has become unsynced. Please try again.')
+                throw new Error('Account list has become unsynced. Please try again.');
             }
             values = editAcctValidateLine(edit_acct_line);
         } catch(err) {
             flash(err.message);
-            console.log(err);
-            return;
+            throw err;
         }
+        flash();
         let els = getEditAcctLineEls(edit_acct_line);
         let nameChanged = false;
         let merging = false;
@@ -3341,10 +3420,11 @@ async function editAcctSaveAcct(edit_acct_line) {
                 }
             }
             let valuesUpdated = async function() {
-                flash('Account updated.');
                 await bha_sync();
+                flash('Account updated.');
                 resetViewsAfterSync();
             }
+            flash('saving account...')
             batchUpdateValues(ssranges, ssvalues, valuesUpdated);
         }
         
@@ -3384,7 +3464,7 @@ function editAcctCreateNewAcct() {
     })
 }
 
-async function editAcctSaveNewAcct(edit_acct_line) {
+async function editAcctSaveNewAcct(edit_acct_line) { // rewrite for data persistency in  cols. E+ ; notify user when awaiting
     isSignedIn(async () => {
         let values;
         try {
@@ -3410,7 +3490,6 @@ async function editAcctSaveNewAcct(edit_acct_line) {
                 destinationIndex = i + 2; // +1 for header, +1 to put after
             }
         }
-        console.log(subsToSkip, destinationIndex)
         try {
             await insertRows('Account List', destinationIndex, destinationIndex + 1);
             batchUpdateValues(
@@ -3498,6 +3577,7 @@ function editAcctCancelNewAcct(edit_acct_line) {
 }
 
 async function acctsStillSynced() {
+    flash('making sure account list is synced...');
     let accts_response;
     try {
         accts_response = await gapi.client.sheets.spreadsheets.values.batchGet({
@@ -3506,8 +3586,7 @@ async function acctsStillSynced() {
         });
     } catch (err) {
         flash(err.message);
-        console.log(err);
-        return;
+        throw err;
     }
     let liveAccts = accts_response.result.valueRanges[0].values;
     let sameLength = accts.length == liveAccts.length;
@@ -3520,6 +3599,7 @@ async function acctsStillSynced() {
         populateEditAccts();
         throw new Error('Account list has become unsynced. Please try again.')
     }
+    flash();
 }
 
 async function eaMvLineUp(edit_acct_line) {
@@ -3555,9 +3635,13 @@ async function eaMvLineUp(edit_acct_line) {
         console.log(err);
         return;
     }
+    flash('moving account up...')
     accts.splice(destinationSsIndex, 0, accts.splice(currentSsIndex, 1)[0]);
     organizeSubAccts(name);
-    batchUpdateValues(['Account List!A2'], [accts], populateEditAccts()); // no need to Sync because we've already updated the entire accts array
+    batchUpdateValues(['Account List!A2'], [accts], () => {
+        populateEditAccts(); // no need to Sync because we've already updated the entire accts array
+        flash('account reordered');
+    });
 }
 
 function organizeSubAccts(name) {
@@ -3615,12 +3699,16 @@ async function eaMvLineDown(edit_acct_line) {
         console.log(err);
         return;
     }
+    flash('moving account down...')
     accts.splice(destinationSsIndex - 1, 0, accts.splice(currentSsIndex, 1)[0]); // must subtract 1 from destination index because we've removed an earlier index with the splice.
     organizeSubAccts(name);
-    batchUpdateValues(['Account List!A2'], [accts], populateEditAccts()); // no need to Sync because we've already updated the entire accts array
+    batchUpdateValues(['Account List!A2'], [accts], () => {
+        flash('account reordered');
+        populateEditAccts()
+    }); // no need to Sync because we've already updated the entire accts array
 }
 
-function editAcctDeleteAcct(edit_acct_line) {
+function editAcctDeleteAcct(edit_acct_line) { // rewrite for data persistency in cols E+; user notice when awaiting
     isSignedIn(() => {
         let els = getEditAcctLineEls(edit_acct_line);
         let name = els.name.value ? els.name.value : '';
@@ -4034,10 +4122,11 @@ function ledgersClickHandler(e) {
 
 function ledgersChangeHandler(e) {
     if (e.target.id == 'ledgers_accts_select') {
+        let from_date = document.getElementById('ledger_from_date');
         if (e.target.value == 'A' || e.target.value == 'L' || e.target.value == 'Q' || e.target.value == 'P') {
-            document.getElementById('ledger_from_date').value = `${today.getFullYear()}-01-01`;
+           from_date.value = from_date.value ? `${from_date.value.substring(0,4)}-01-01` : `${today.getFullYear()}-01-01`;
         } else {
-            document.getElementById('ledger_from_date').value = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-01`;
+            from_date.value = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-01`;
         }
     }
 }
@@ -4467,7 +4556,6 @@ function NMRolloverChanged(ledger_line) {
 let eomClickHandler = function(e) {
     if (e.target.classList.contains('nm_adj_bud')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement;
-        console.log(ledger_line);
         adjNMBud(ledger_line);
     } else if (e.target.classList.contains('adj_ro_btn')) {
         let ledger_line = e.target.parentElement.parentElement.parentElement.parentElement;
@@ -4504,7 +4592,7 @@ function populatePrevSSIDs() {
         prevSSIDsSelect.append(opt);
     }
     document.getElementById('remove_saved_ssid').style.display = 'none';
-    if (Object.keys(prevSSIDs).length > 1) {
+    if (Object.keys(prevSSIDs).length > 0) {
         document.getElementById('setup_previous_journals').style.display = 'block';
     } else {
         document.getElementById('setup_previous_journals').style.display = 'none';
@@ -4569,6 +4657,7 @@ function checkAcceptLicense(callback) {
 function saveSsid() {
     isSignedIn(() => {
         checkAcceptLicense(async () => {  // don't delete prevSSIDs
+            flash('loading spreadsheet...');
             localStorage.removeItem('spreadsheetID');
             localStorage.removeItem('spreadsheet_properties');
             localStorage.removeItem('last_sync');
@@ -4586,9 +4675,8 @@ function saveSsid() {
             }
             try {
                 await bha_sync();
-                flash(`Synced to spreadsheet ID ${ssid}`);
                 updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
-                goToPage('add_entry');
+                flash(`Synced to spreadsheet ID ${ssid}`);
             } catch(err) {
                 flash('Error: ' + err.toString());
                 console.log(err);
@@ -4692,12 +4780,13 @@ function createSpreadsheet() {
                     ['Capital gain', 'R', 'Revenue']
                 ];
             }
-        
+    
+            flash('creating spreadsheet...');
             let creation_response;
             try {
                 creation_response = await gapi.client.sheets.spreadsheets.create({
                     properties: {
-                        title: 'Untitled journal: Baker Home Accounting'
+                        title: 'Untitled journal: q͜ʘ'
                     },
                     sheets: [{
                         properties: {
@@ -4728,6 +4817,7 @@ function createSpreadsheet() {
             localStorage.setItem('spreadsheetID', ssid);
             localStorage.setItem('spreadsheet_properties', JSON.stringify(ssprops));
         
+            flash('applying settings...');
             try {
                 await gapi.client.sheets.spreadsheets.batchUpdate({
                     spreadsheetId: ssid,
@@ -4754,6 +4844,7 @@ function createSpreadsheet() {
                         }
                     }]
                 });
+                flash('applying template...');
                 response = await gapi.client.sheets.spreadsheets.values.batchUpdate({
                     spreadsheetId: ssid,
                     resource: {
@@ -4774,19 +4865,17 @@ function createSpreadsheet() {
                 flash(err.message);
             }
         
-            prevSSIDs[ssid] = ssprops.properties.title;
-            updateInterfaceForSignin();
-            let lastSync = `${mos[today.getMonth()]} ${today.getDate()}`;
-            document.getElementById('last_sync').textContent = `synced ${lastSync} `;
-            flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
+            await bha_sync();
             updateEntryOpts(document.getElementById('add_entry').firstChild, 'exp');
-            goToPage('add_entry');
+            document.getElementById('new_ss_templates').value = '';
+            flash(`New journal created${template ? ' from ' + template + ' template.' : '.'}`);
         });})
 }
 
 async function saveJournalName(name) {
     isSignedIn(async () => {
         try {
+            flash('saving...');
             let response;
             response = await gapi.client.sheets.spreadsheets.batchUpdate({
                 spreadsheetId: ssid,
@@ -4818,7 +4907,14 @@ async function saveJournalName(name) {
             document.getElementById('edit_journal_name').style.display = 'inline';
             document.getElementById('cancel_edit_journal_name').style.display = 'none';
             document.getElementById('save_journal_name').style.display = 'none';
-            bha_sync();
+            document.getElementById('top_title').textContent = name;
+            document.getElementById('journal_name').value = name;
+            document.getElementById('journal_name').value = name;
+            document.getElementById('journal_name').size = name.length > 20 ? name.length : 20;
+            document.getElementsByTagName('title')[0].textContent = name + ': \u0071\u035C\u0298';
+            prevSSIDs[ssid] = name;
+            populatePrevSSIDs();
+            flash();
         } catch(err) {
             flash(err.message);
             throw err;
@@ -4849,61 +4945,91 @@ function validatePastedSSID(event) {
     document.getElementById('open_journal_btn').disabled = false;
 }
 
-function removeSsid() {
-    let ssidToRemove = document.getElementById('open_journal_select').value;
+
+function disconnectCurrentSpreadsheet() {
     let message = mk('span');
-    message.textContent = `"${prevSSIDs[ssidToRemove]}" will be removed from the list. To delete the journal, do so `;
+    message.textContent = `Disconnect from ${ssprops.properties.title} and remove it from the list of previously opened journals. To delete the journal, do so `;
     let link = mk('a');
     link.textContent = 'in Google Sheets';
     link.title = 'link to journal in Google Sheets';
-    link.href = `https://docs.google.com/spreadsheets/d/${ssidToRemove}/edit`;
+    link.href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
     message.append(link);
-    flash(message, () => {
-        delete prevSSIDs[ssidToRemove];
+    flash(message, () => {localStorage.removeItem('spreadsheetID');
+        delete prevSSIDs[ssid];
         localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
-        if (ssid == ssidToRemove) {
-            localStorage.removeItem('spreadsheetID');
-            localStorage.removeItem('spreadsheet_properties');
-            localStorage.removeItem('last_sync');
-            localStorage.removeItem('journal');
-            localStorage.removeItem('account_list');
-            localStorage.removeItem('rcrgs');
-            localStorage.removeItem('lastPageViewed');
-            localStorage.removeItem('entryQueue');
-            ssid = '';
-            ssprops = '';
-            document.getElementById('top_title').textContent = '';
-            document.getElementById('setup_journal_name').style.display = 'none';
-            document.getElementById('journal_name').value = '';
-            document.getElementById('journal_name').size = 20;
-            document.getElementById('edit_journal_name').disabled = true;
-            document.getElementById('spreadsheet_link').href = '';
-            document.getElementsByTagName('title')[0].textContent = '\u0071\u035C\u0298 Baker Home Accounting';
-            if (Object.keys(prevSSIDs).length == 1) {
-                id = Object.keys(prevSSIDs)[0];
-                document.getElementById('ssid').value = id;
-                title = prevSSIDs[id];
-                flash(`Sync to journal "${title}," spreadsheet ID ${id}?`, saveSsid);
-            } else {
-                document.getElementById('ssid').value = '';
-            }
-        }
+        localStorage.removeItem('spreadsheet_properties');
+        localStorage.removeItem('last_sync');
+        localStorage.removeItem('journal');
+        localStorage.removeItem('account_list');
+        localStorage.removeItem('rcrgs');
+        localStorage.removeItem('lastPageViewed');
+        localStorage.removeItem('entryQueue');
+        localStorage.removeItem('offlineOpt');
+        ssid = '';
+        ssprops = '';
+        accts = [];
+        journal = [];
+        rcrgs = [];
+        eom_ledger = {};
+        document.getElementById('ssid').value = '';
+        document.getElementById('top_title').textContent = '';
+        document.getElementById('setup_journal_name').style.display = 'none';
+        document.getElementById('journal_name').value = '';
+        document.getElementById('journal_name').size = 20;
+        document.getElementById('edit_journal_name').disabled = true;
+        document.getElementById('spreadsheet_link').href = '';
+        document.getElementsByTagName('title')[0].textContent = '\u0071\u035C\u0298 Baker Home Accounting';
+        goToPage('setup');
+        document.getElementById('navbar').style.display = 'none';
+        document.getElementById('splash').style.display = 'flex';
+        document.getElementById('spreadsheet_link').href = '';
+        document.getElementById('sync_btn').style.display = 'none';
+        resetViewsAfterSync();
         populatePrevSSIDs();
     });
+    
+}
+
+function removeSsid() {
+    let ssidToRemove = document.getElementById('open_journal_select').value;
+    if (ssidToRemove == ssid) {
+        disconnectCurrentSpreadsheet();
+    } else {
+        let message = mk('span');
+        message.textContent = `"${prevSSIDs[ssidToRemove]}" will be removed from the list. To delete the journal, do so `;
+        let link = mk('a');
+        link.textContent = 'in Google Sheets';
+        link.title = 'link to journal in Google Sheets';
+        link.href = `https://docs.google.com/spreadsheets/d/${ssidToRemove}/edit`;
+        message.append(link);
+        flash(message, () => {
+            delete prevSSIDs[ssidToRemove];
+            localStorage.setItem('prevSSIDs', JSON.stringify(prevSSIDs));
+            populatePrevSSIDs();
+        });
+    }
+    
 }
 
 function saveSigninChanged(target) {
     if (target.checked) {
-        localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
-        localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
-        if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
-        if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
-        if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
+        flash('You will stay signed in if you come back to this page within a short time. Do you also want to keep journal data stored on your device, in case of poor internet connection? Do not use on shared devices.', () => {
+            localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+            localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+            if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
+            if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
+            if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
+        }, () => {
+            localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
+            localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+        })
+        
     } else {
         localStorage.removeItem('gapiToken');
         localStorage.removeItem('journal');
         localStorage.removeItem('account_list');
         localStorage.removeItem('rcrgs');
+        localStorage.removeItem('offlineOpt');
     }
 }
 
@@ -4915,6 +5041,8 @@ let setupClickHandler = function(e) {
     } else if (e.target.id == 'save_journal_name') {
         let name = document.getElementById('journal_name').value;
         saveJournalName(name);
+    } else if (e.target.id == 'disconnect_btn') {
+        disconnectCurrentSpreadsheet();
     } else if (e.target.id == 'new_ss') {
         createSpreadsheet();
     } else if (e.target.id == 'open_journal_btn') {
@@ -4974,11 +5102,13 @@ if (localStorage.getItem('entryQueue')) {
 
 newBlankEntry('exp');
 
+
 document.getElementById('flash').addEventListener('click', flashClickHandler);
 document.getElementById('navbar').addEventListener('change', navbarChangeHandler);
 document.getElementById('content').addEventListener('click', addEntryClickHandler);
 document.getElementById('content').addEventListener('change', addEntryChangeHandler);
-document.getElementById('content').addEventListener('focus', addEntryFocusHandler);
+document.getElementById('content').addEventListener('focusin', addEntryFocusinHandler);
+document.getElementById('content').addEventListener('focusout', addEntryFocusoutHandler);
 document.getElementById('content').addEventListener('click', ledgersClickHandler);
 document.getElementById('content').addEventListener('change', ledgersChangeHandler)
 document.getElementById('content').addEventListener('click', journalClickHandler);

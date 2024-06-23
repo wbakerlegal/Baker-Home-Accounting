@@ -308,6 +308,9 @@ input:disabled, select:disabled {
     border: 0;
     padding: 0.3rem;
 }
+.type_container button:disabled:not(.active_type) {
+    color: #fff;
+}
 .type_container .split_entry:disabled {
     display: none;
 }
@@ -370,7 +373,7 @@ input:disabled, select:disabled {
     padding:.25rem;
     border-radius: 0.2rem;
 }
-.rem_deb_acct:disabled, .rem_cred_acct:disabled {
+button.rem_deb_acct:disabled, button.rem_cred_acct:disabled { /* had to add tag name to increase specificity over the button:disabled:not(.gsi-material-button) selector above */
     color: #fff;
     border: none;
 }
@@ -389,11 +392,22 @@ input:disabled, select:disabled {
   -webkit-appearance: none;
   margin: 0;
 }
-
 /* Firefox */
 .deb_amt:disabled, .cred_amt:disabled {
     appearance: textfield;
     -moz-appearance: textfield;
+}
+#entry_auto_amount_btn_wrap {
+    position: relative;
+    height: 0;
+    width: 0;
+    margin-left: auto; /* for credit, overriden by .nogap when debit */
+}
+#entry_auto_amount_btn {
+    position: absolute;
+    top: 0;
+    left: 0.25rem;
+    transform: translate(-100%, -100%);
 }
 .entry_summary {
     display: flex;
@@ -608,6 +622,9 @@ input:disabled, select:disabled {
     text-decoration: none;
     color: #78CBF5;
 }
+#setup button, #setup input {
+    margin-bottom: 0.4rem;
+}
 #setup label {
     font-size: 0.83rem;
     font-weight: bold;
@@ -621,7 +638,7 @@ input:disabled, select:disabled {
     border-radius: 0.35rem;
     background: #75675F;
     border-bottom: 0.35rem solid #78cbf5;
-    padding: 1rem 2rem;
+    padding: 3rem 2rem;
     margin: 1.5rem 0;
     display: flex;
     align-items: center;
@@ -643,7 +660,8 @@ input:disabled, select:disabled {
     border-bottom: 2px solid #F5CD78;
 }
 #journal_name:disabled {
-    border: 1px solid #75675F;
+    border: 0.07rem solid #75675F;
+    padding: 0.55rem;
 }
 #setup_spreadsheet_link {
     padding-top: 0.5rem;
@@ -666,6 +684,8 @@ input:disabled, select:disabled {
     border-top: 2px solid #F5CD78;
 }
 
+/* alert user yet another white rectangle with dry words and numbers is here but this one is for something else */
+
 @keyframes popunder {
     0% {background-color: #DAEDF7;}
     20% {background-color: #DAEDF7;}
@@ -676,6 +696,8 @@ input:disabled, select:disabled {
     animation-name: popunder;
     animation-duration: 3s;
 }
+
+/* #mobileSecond */
 
 @media only screen and (max-width: 650px) {
     body {
@@ -703,6 +725,8 @@ input:disabled, select:disabled {
         padding: 0.5rem 0 0;
     }
 }
+
+/* google compliance */
 
 .gsi-material-button {
     appearance: none;
@@ -736,16 +760,16 @@ input:disabled, select:disabled {
     width: auto;
     max-width: 400px;
     min-width: min-content;
-  }
+}
   
-  .gsi-material-button .gsi-material-button-icon {
+.gsi-material-button .gsi-material-button-icon {
     height: 20px;
     margin-right: 12px;
     min-width: 20px;
     width: 20px;
-  }
+}
   
-  .gsi-material-button .gsi-material-button-content-wrapper {
+.gsi-material-button .gsi-material-button-content-wrapper {
     -webkit-align-items: center;
     align-items: center;
     display: flex;
@@ -757,9 +781,9 @@ input:disabled, select:disabled {
     justify-content: space-between;
     position: relative;
     width: 100%;
-  }
+}
   
-  .gsi-material-button .gsi-material-button-contents {
+.gsi-material-button .gsi-material-button-contents {
     -webkit-flex-grow: 1;
     flex-grow: 1;
     font-family: 'Roboto', arial, sans-serif;
@@ -767,9 +791,9 @@ input:disabled, select:disabled {
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: top;
-  }
+}
   
-  .gsi-material-button .gsi-material-button-state {
+.gsi-material-button .gsi-material-button-state {
     -webkit-transition: opacity .218s;
     transition: opacity .218s;
     bottom: 0;
@@ -778,34 +802,43 @@ input:disabled, select:disabled {
     position: absolute;
     right: 0;
     top: 0;
-  }
+}
   
-  .gsi-material-button:disabled {
+.gsi-material-button:disabled {
     cursor: default;
     background-color: #ffffff61;
     border-color: #1f1f1f1f;
-  }
+}
   
-  .gsi-material-button:disabled .gsi-material-button-contents {
+.gsi-material-button:disabled .gsi-material-button-contents {
     opacity: 38%;
-  }
+}
   
-  .gsi-material-button:disabled .gsi-material-button-icon {
+.gsi-material-button:disabled .gsi-material-button-icon {
     opacity: 38%;
-  }
+}
   
-  .gsi-material-button:not(:disabled):active .gsi-material-button-state, 
-  .gsi-material-button:not(:disabled):focus .gsi-material-button-state {
+.gsi-material-button:not(:disabled):active .gsi-material-button-state, 
+.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
     background-color: #303030;
     opacity: 12%;
-  }
+}
   
-  .gsi-material-button:not(:disabled):hover {
+ .gsi-material-button:not(:disabled):hover {
     -webkit-box-shadow: 0 1px 2px 0 rgba(60, 64, 67, .30), 0 1px 3px 1px rgba(60, 64, 67, .15);
     box-shadow: 0 1px 2px 0 rgba(60, 64, 67, .30), 0 1px 3px 1px rgba(60, 64, 67, .15);
-  }
+}
   
-  .gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
     background-color: #303030;
     opacity: 8%;
-  }
+}
+
+/* overrides */
+
+.nomargin {
+    margin: 0 !important; 
+}
+.nogap {
+    margin-left: -.5rem !important;
+}
