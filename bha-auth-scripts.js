@@ -204,7 +204,7 @@ async function bha_sync() {
 
   eom_ledger = {};
 
-  if (localStorage.getItem('gapiToken')) {
+  if (localStorage.getItem('offlineOpt')) {
     // FOR DEVELOPMENT ONLY, need to stress test:
     localStorage.setItem('journal', JSON.stringify(journal ? journal : []));
     // END FOR DEVELOPMENT ONLY
@@ -249,7 +249,7 @@ function updateInterfaceForSignin() {
       document.getElementById('journal_name').value = ssprops.properties.title;
       document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
       document.getElementById('edit_journal_name').disabled = false;
-      document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
+      document.getElementById('spreadsheet_link').href = ssprops.spreadsheetUrl;
       document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
       populatePrevSSIDs();
   }

@@ -115,7 +115,9 @@ input:disabled, select:disabled {
     flex: 1 1 auto;
     word-break: break-word;
 }
-
+#dash_links > span {
+    text-wrap: nowrap;
+}
 #navbar {
     display: none;
     flex-wrap: wrap;
@@ -231,6 +233,8 @@ input:disabled, select:disabled {
 #footer_firstline {
     padding: 0.75rem 1rem 0;
     background-color: #5F6E75;
+    display: flex;
+    gap: 0.5rem;
 }
 #footer_copyright {
     font-style: italic;
@@ -614,11 +618,11 @@ button.rem_deb_acct:disabled, button.rem_cred_acct:disabled { /* had to add tag 
     margin-top: .5rem;
     color: #5F6E75;
 }
-#setup a, #setup .fakea {
+#setup a, #setup .fakea, #privacy a {
     color: #F5A778;
     text-decoration: underline;
 }
-#setup a:hover, #setup .fakea:hover {
+#setup a:hover, #setup .fakea:hover, #privacy a:hover {
     text-decoration: none;
     color: #78CBF5;
 }

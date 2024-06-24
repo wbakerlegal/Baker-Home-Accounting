@@ -13,11 +13,9 @@
    limitations under the License.
 */
 
-// To-do: 
+// To-do:
 
-// add error classes to rcrg inputs on recurring validation
 // split out database connection from updateinterfaceforsignin and -out functions, looking at localStorage, global vars, and display elements
-// notify if empty ledger, journal, recurrings, edit accts
 // keyboard navigation
 // journal entries correctly displaying chronological by date, but incorrectly reversing the order of entries on each date
 // change doIf_StillSynced and batchUpdateValues functions to promise-based rather than callback
@@ -912,8 +910,6 @@ function entryAmtUpdateDisplay(els) {
                 }
             }
         }
-        
-        // update summaries
         els.debits.textContent = '$' + insertCommas(debits);
         els.debits.style.display = els.deb_amts.length > 1 ? 'inline' : 'none';
         els.credits.textContent = '$' + insertCommas(credits);
@@ -938,7 +934,6 @@ function entryAmtFocusin(e) {
         for (let i = 0; i < els.deb_amts.length + els.cred_amts.length; i++) {
             if (i < els.deb_amts.length) {
                 if (els.deb_amts[i] === e.target) continue;
-                //els.deb_amts[i].setAttribute('list', null);
                 if (!parseFloat(els.deb_amts[i].value)) {
                     emptyAmts++;
                 } else {
@@ -947,7 +942,6 @@ function entryAmtFocusin(e) {
             } else {
                 const j = i - els.deb_amts.length;
                 if (els.cred_amts[j] === e.target) continue;
-                //els.cred_amts[j].setAttribute('list', null);
                 if (!parseFloat(els.cred_amts[j].value)) {
                     emptyAmts++;
                 } else {
@@ -955,8 +949,9 @@ function entryAmtFocusin(e) {
                 }
             }
         }
-        let balanced = e.target.classList.contains('deb_amt') ? (debits + parseFloat(e.target.value)).toFixed(2) == credits.toFixed(2) : debits.toFixed(2) == (credits + parseFloat(e.target.value)).toFixed(2);
-        if (emptyAmts == 0 && !balanced) {
+        const balanced = e.target.classList.contains('deb_amt') ? (debits + parseFloat(e.target.value)).toFixed(2) == credits.toFixed(2) : debits.toFixed(2) == (credits + parseFloat(e.target.value)).toFixed(2);
+        const alreadyOver = e.target.classList.contains('deb_amt') ? debits >= credits : credits >= debits;
+        if (emptyAmts == 0 && !balanced && !alreadyOver) {
             const balance = Math.abs(debits - credits).toFixed(2);
             const wrap = mk();
             wrap.id = 'entry_auto_amount_btn_wrap';
@@ -976,12 +971,11 @@ function entryAmtFocusin(e) {
 
 function entryAmtFocusout(e) {
     setTimeout(() => {
-        //if (e.target.previousElementSibling.id == 'entry_auto_amount_btn_wrap') e.target.previousElementSibling.remove();
         if (e.target.previousElementSibling.id == 'entry_auto_amount_btn_wrap' && document.activeElement.id != 'entry_auto_amount_btn') {
             e.target.previousElementSibling.remove();
             if (e.target.classList.contains('cred_amt')) e.target.classList.remove('nomargin');
         }
-    },75);
+    },60);
 }
 
 function fillEntryAmt(button) {
@@ -1135,14 +1129,14 @@ function subValidateEntryAmts(els, errorsArr, quiet) {
     let credits = 0;
     let missingAmt = false;
     for (let i = 0; i < els.deb_amts.length; i++) {
-        if (!els.deb_amts[i].value) {
+        if (!parseFloat(els.deb_amts[i].value)) {
             missingAmt = true;
             if (!quiet) els.deb_amts[i].classList.add('error');
         }
         debits += els.deb_amts[i].value ? parseFloat(els.deb_amts[i].value) : 0;
     }
     for (let i = 0; i < els.cred_amts.length; i++) {
-        if (!els.cred_amts[i].value) {
+        if (!parseFloat(els.cred_amts[i].value)) {
             missingAmt = true;
             if (!quiet) els.cred_amts[i].classList.add('error');
         }
@@ -1564,6 +1558,11 @@ let displayJournalEntriesByDate = function() {
     let target = document.getElementById('journal');
     while (target.firstChild) target.firstChild.remove();
     for (const entry of entryList) target.append(getEntryInputLine(entry));
+    if (entryList.length == 0) {
+        const none = mk('h4');
+        none.textContent = 'Nothing found.'
+        target.append(none);
+    }
 }
 
 async function doIfEntryStillSynced(entry_line, callback) { // calling function will have already checked if we're signed in
@@ -2018,6 +2017,12 @@ function populateRcrg() {
         let line = getRcrgLine(entry);
         document.getElementById('rcrg').append(line);
     }
+
+    if (rcrgList.length == 0) {
+        const none = mk('h4');
+        none.textContent = 'Nothing found.'
+        document.getElementById('rcrg').append(none);
+    }
 }
 
 function getRcrgLine(e) {
@@ -2369,16 +2374,19 @@ function getRcrgLineEls(line) {
 }
 
 function validateRcrgLine(line, quiet) {
-    let errors = [];
-    let els = getRcrgLineEls(line);
+    const errors = [];
+    const els = getRcrgLineEls(line);
     if (!els.rcrtype.value) {
         errors.push('Recurring type is required.');
+        els.rcrtype.classList.add('error');
     }
     if (!els.qty.value) {
         errors.push('Recurring interval is required.');
+        els.qty.classList.add('error');
     }
     if (!els.period.value) {
         errors.push('Recurring interval period is required.');
+        els.period.classList.add('error');
     }
     let atLeastOneAcct;
     for (const el of els.deb_accts) {
@@ -2830,11 +2838,15 @@ let rcrgClickHandler = function(e) {
 
 let rcrgChangeHandler = function(e) {
     if (e.target.classList.contains('rcrg_type')) {
+        if (e.target.value) e.target.classList.remove('error');
         let rcrg_line = e.target.parentElement.parentElement;
         rcrgTypeChanged(rcrg_line);
     } else if (e.target.classList.contains('rcrg_qty')) {
+        if (e.target.value) e.target.classList.remove('error');
         let rcrg_line = e.target.parentElement.parentElement;
         updateRcrgOnText(rcrg_line);
+    } else if (e.target.classList.contains('rcrg_period')) {
+        if (e.target.value) e.target.classList.remove('error');
     }
 }
 
@@ -3087,8 +3099,8 @@ function getEditAcctLine(acct) {
 }
 
 function populateEditAccts() {
-    let nestedAccts = getNestedAccts();
-    let target = document.getElementById('edit_accts');
+    const nestedAccts = getNestedAccts();
+    const target = document.getElementById('edit_accts');
     while (target.firstChild) {
         target.firstChild.remove();
     }
@@ -3113,6 +3125,11 @@ function populateEditAccts() {
             addSubsToParentLine(root_acct_line, subAcct);
         }
         target.append(root_acct_line);
+    }
+    if (nestedAccts.length == 0) {
+        const none = mk('h4');
+        none.textContent = 'Nothing found.'
+        target.append(none);
     }
 }
 
@@ -3979,16 +3996,20 @@ function initializeLedgers() {
 }
 
 function handleLedgersQuery() {
-    let from_date = document.getElementById('ledger_from_date').value;
-    let to_date = document.getElementById('ledger_to_date').value;
-    let acct_class = document.getElementById('ledgers_accts_select').value;
-    let ledger = get_ledger(from_date, to_date, acct_class);
-
-    target = document.getElementById('ledgers_display');
+    const from_date = document.getElementById('ledger_from_date').value;
+    const to_date = document.getElementById('ledger_to_date').value;
+    const acct_class = document.getElementById('ledgers_accts_select').value;
+    const ledger = get_ledger(from_date, to_date, acct_class);
+    const target = document.getElementById('ledgers_display');
     while (target.firstChild) target.firstChild.remove();
     for (const key in ledger) {
-        let line = getLedgerLine(key, ledger[key]);
+        const line = getLedgerLine(key, ledger[key]);
         target.append(line);
+    }
+    if (Object.keys(ledger).length == 0) {
+        const none = mk('h4');
+        none.textContent = 'Nothing found.'
+        target.append(none);
     }
 }
 
@@ -4952,7 +4973,7 @@ function disconnectCurrentSpreadsheet() {
     let link = mk('a');
     link.textContent = 'in Google Sheets';
     link.title = 'link to journal in Google Sheets';
-    link.href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
+    link.href = ssprops.spreadsheetUrl;
     message.append(link);
     flash(message, () => {localStorage.removeItem('spreadsheetID');
         delete prevSSIDs[ssid];
@@ -5016,6 +5037,7 @@ function saveSigninChanged(target) {
         flash('You will stay signed in if you come back to this page within a short time. Do you also want to keep journal data stored on your device, in case of poor internet connection? Do not use on shared devices.', () => {
             localStorage.setItem('gapiToken', gapi.client.getToken().access_token);
             localStorage.setItem('gapiTokenExp', tokenExpirationInMS);
+            localStorage.setItem('offlineOpt', 'true');
             if (rcrgs.length > 0) localStorage.setItem('rcrgs', JSON.stringify(rcrgs));
             if (accts.length > 0) localStorage.setItem('account_list', JSON.stringify(accts));
             if (journal.length > 0) localStorage.setItem('journal', JSON.stringify(journal));
@@ -5079,7 +5101,7 @@ if (ssprops) {
     document.getElementById('journal_name').value = ssprops.properties.title;
     document.getElementById('journal_name').size = ssprops.properties.title.length > 20 ? ssprops.properties.title.length : 20;
     document.getElementById('edit_journal_name').disabled = false;
-    document.getElementById('spreadsheet_link').href = `https://docs.google.com/spreadsheets/d/${ssid}/edit`;
+    document.getElementById('spreadsheet_link').href = ssprops.spreadsheetUrl;
     document.getElementsByTagName('title')[0].textContent = ssprops.properties.title + ': \u0071\u035C\u0298';
     let lastPageViewed = localStorage.getItem('lastPageViewed');
     if (lastPageViewed) {

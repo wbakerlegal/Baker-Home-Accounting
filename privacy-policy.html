@@ -15,11 +15,38 @@
             <a href="./">home</a>
         </div>
         <div id="content">
-            <div class="main">
-                <h3>Privacy policy:</h3>
-                <p>This website (q͜ʘ, Baker Home Accounting; the &#x201C;Software&#x201D;) runs in your device&#x2019;s web browser and stores data in a Google Sheets spreadsheet associated with your Google account. The Software accesses data only from (a) the Google Sheets spreadsheet created by the Software at your direction or (b) a Google Sheets spreadsheet linked using a URL you supply. While you use the Software, your data is sent between your device and the connected Google Sheets spreadsheet. Your data is processed in your device&#x2019;s web browser for the sole purpose of displaying information to you. None of the data in your Google Sheets spreadsheets is visible to the server hosting the Software or any owner or developer of the Software.</p>
-                <p>The Software stores some of your data in your device&#x2019;s web browser, using the Web Storage API. The title and spreadsheet ID of the connected spreadsheet are saved so you can reconnect more easily. This data can be removed from your device&#x2019;s web browser by selecting the option to &#x201C;remove&#x201D; the selected spreadsheet in the General Setup area of the Software. If the option to &#x201C;keep me signed in&#x201D; is checked, the contents of the connected Google Sheets spreadsheet are stored in your device&#x2019;s web browser to enable limited offline functionality. All data from the connected spreadsheet is removed from your device&#x2019;s web browser by selecting the option to &#x201C;disconnect&#x201D; in the General Setup area of the Software.</p>
+            <div class="main" id="privacy">
+                <h2>Privacy Policy</h2>
+                <p>This website (q͜ʘ, Baker Home Accounting; the “Software”) uses data stored in a Google Sheets spreadsheet associated with your Google account to help you keep a basic accounting journal and view the information you compile in the journal.</p>
                 <p>The Software&#x2019;s use and transfer to any other app of information received from Google APIs will adhere to <a href="https://developers.google.com/terms/api-services-user-data-policy#additional_requirements_for_specific_api_scopes">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+                <p>This policy will be updated to reflect any changes to what the Software does with your data, and the Software will prominently notify you of any such update.</p>
+                <h3 id="data_access">Access of Your Data</h3>
+                <p>As you use the Software, the Software retrieves data (the “Spreadsheet Data”) from a Google Sheets spreadsheet either (a) &#x2018;owned&#x2019; by your Google account or (b) to which you have access (the “Linked Spreadsheet”).</p>
+                <p>The Spreadsheet Data consists of:</p>
+                <ol>
+                    <li>the contents of the sheets titled “Journal,” “Account List,” and “Recurring Entries” in the Linked Spreadsheet;</li>
+                    <li>basic properties of the Linked Spreadsheet including its URL and the title and ID of the Linked Spreadsheet and of its component sheets.</li>
+                </ol>
+                <p>If the Linked Spreadsheet has sheets with titles other than those listed above, the Software does not access the contents of those other sheets.</p>
+                <p>During use of the Software, data in the “Journal,” “Account List,” and “Recurring Entries” sheets of the Linked Spreadsheet may be rearranged or deleted without warning.</p>
+                <p>When you sign in, the Software receives a “Token” from Google that allows the Software to use Google APIs to access your data for an amount of time specified in the Token and only for the scope of your data specified in the Token. The Token contains no information about your Google account. The Software requests the minimum access scope available that allows it to create, see, and edit a Linked Spreadsheet.</p>
+                <h3 id="data_use">Use of Your Data</h3>
+                <p>The Software uses the Spreadsheet Data:</p>
+                <ul>
+                    <li>to present accounting-related summaries and reports derived from the data, and</li>
+                    <li>to provide interfaces for you to modify the Spreadsheet Data.</li>
+                </ul>
+                <p>The Software runs in your device&#x2019;s web browser. The Software&#x2019;s host serves static files and does not receive or process any Spreadsheet Data or any other data that may exist through the Software&#x2019;s use of Google APIs (collectively, your “Data from Google”). The Software does not send any of your Data from Google to any network endpoints other than your device and those provided in the applicable Google APIs.</p>
+                <p>The Software makes no use of your Data from Google other than as detailed in this policy.</p>
+                <h3 id="data_storage">Storage of Your Data</h3>
+                <p>The Software stores your data in (1) a Google Sheets spreadsheet and (2) your device&#x2019;s web browser (specifically, through the browser&#x2019;s Web Storage API).</p>
+                <p>The section “<a href="#data_access">Access of Your Data</a>,” above, details what the Software stores in the Google Sheets spreadsheet.</p>
+                <p>The Software allows you full control over whether the Spreadsheet Data and the sign-in Token are stored on your device through options in the General Setup area of the Software.</p>
+                <p>As a security procedure for the data stored on your device, you can remove any of the Data from Google that the Software stores on your device by using the controls in the General Setup area of the Software. By default, only the Linked Spreadsheet&#x2019;s title and ID are stored on your device. The Software does not remove your Data from Google from your device until you direct it to do so. If you do use the Software to store data on your device, that data inherently is only as secure, private, and confidential as you keep your device.</p>
+                <p></p>
+                <h3 id="data_sharing">Sharing of Your Data</h3>
+                <p>Neither the Software, nor its owner, nor any person affiliated therewith, will share your data with any other person. As detailed elsewhere in this policy, your use of the Software does not allow the Software&#x2019;s owner, developer, or host server even to access any of your Data from Google.</p>
+                <p>This policy does not apply to any sharing of your data that may occur other than through your use of the Software. If you are the &#x2018;owner&#x2019; of the Linked Spreadsheet in Google Sheets, you are responsible for controlling access to the Linked Spreadsheet. The Software does not give you any control over who can access a Linked Spreadsheet.</p>
             </div>
             <div id="footer">
                 <div id="footer_copyright">&copy; 2024 William Baker. Google Sheets is a trademark of Google LLC. This software is licensed under the Apache License, Version 2.0 (the &#x201C;License&#x201D;); you may not use this software except in compliance with the License. You may view a copy of the License <a href="LICENSE.txt" title="plain text Apache-2.0 license">here</a>. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an &#x201C;AS IS&#x201D; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.</div>
