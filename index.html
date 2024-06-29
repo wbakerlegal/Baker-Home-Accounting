@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>q͜ʘ Baker Home Accounting</title>
-        <link rel="stylesheet" href="bha-style.css?7">
+        <link rel="stylesheet" href="bha-style.css?8">
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
@@ -84,10 +84,229 @@
             <div id="edit_accts" class="main"></div>        
             <div id="setup" class="main">
                 <div id="splash">
-                    <img src="icons/logo512.svg" />
-                    <div>
-                        <div id="splash_title">Baker Home Accounting:</div>
-                        <span id="splash_subtitle">a basic accounting tool</span>                        
+                    <div id="splash_top">
+                        <img src="icons/logo512.svg" />
+                        <div>
+                            <div id="splash_title">Baker Home Accounting:</div>
+                            <span id="splash_subtitle">a basic accounting tool</span>                        
+                        </div>
+                    </div>
+                    <div id="splash_get_started">
+                        <a href="#setup_create_new_journal">get started</a>
+                    </div>
+                    <div id="splash_description">
+                        <div id="splash_intro" class="splash_item">
+                            <div class="splash_inset">
+                                <img src="icons/conic.svg">
+                            </div>
+                            <div class="splash_text">
+                                <p class="splash_lede">Harness the symmetry of the universe to keep your house in order</p>
+                                <p>Any science starts with a pattern: for every this, there is a that. A, therefore B.</p>
+                                <p>In the science of accounting, that pattern is debits equals credits. Assets equals liabilities plus equity. What you have must be the same as what you are supposed to have.</p>
+                                <p>With this pattern, you can track anything. q͜ʘ helps you keep track.</p>
+                            </div>
+                        </div>
+                        <div id="splash_accounts" class="splash_item">
+                            <div class="splash_inset">
+                                <div class="entry" data-origentry="{&quot;type&quot;:&quot;&quot;}">
+                                    <div class="details">
+                                        <input class="desc" name="desc" placeholder="description" value="Buying new car for Chad">
+                                        <input class="date splashdate" type="date">
+                                    </div>
+                                    <div class="type_container">
+                                        <button class="exp_btn" tabindex="-1">expense</button>
+                                        <button class="inc_btn" tabindex="-1">income</button>
+                                        <button class="tfr_btn" tabindex="-1">transfer</button>
+                                        <button class="gen_btn active_type" tabindex="-1">general</button>
+                                        <button class="split_entry" tabindex="-1">split</button>
+                                        <button class="add_deb_acct" tabindex="-1" style="display: none;">add debit</button>
+                                        <button class="add_cred_acct" tabindex="-1" style="display: none;">add credit</button>
+                                    </div>
+                                    <div class="deb_accts">
+                                        <div class="entry_accts_header">
+                                            <div class="side_label_wrap">
+                                                <span class="debit_label">debits:</span>
+                                            </div>
+                                            <div class="deb_wrap">
+                                                <span class="entry_debits" style="display: none;"></span>
+                                            </div>
+                                        </div>
+                                        <div class="entry_acct">
+                                            <select class="deb_acct" name="deb_acct">
+                                                <option value="">account to debit...</option>
+                                                <option value="***" selected>(add new...)</option>
+                                            </select>
+                                            <input class="deb_amt" name="deb_amt" type="number" step="0.01" min="0.01" max="99999.99" placeholder="$0.00" value="2800.00">
+                                            <button class="rem_deb_acct" style="display: none;">−</button>
+                                        </div>
+                                        <div class="ea_line" data-orig="{&quot;name&quot;:&quot;&quot;,&quot;typecodes&quot;:&quot;&quot;,&quot;parent&quot;:&quot;&quot;,&quot;budget&quot;:&quot;&quot;}">
+                                            <div class="ea_name_and_controls">
+                                                <div class="ea_arrow"> </div>
+                                                <input class="ea_name" placeholder="account name" name="edit_acct_name" size="20" maxlength="30" value="2006 Chevrolet Impala VIN 2G1WD58C069218">
+                                                <div class="ea_controls">
+                                                    <button>cancel</button>
+                                                    <button>save</button>
+                                                </div>
+                                            </div>
+                                            <div class="ea_opts" style="display: flex;">
+                                                <div class="ea_type_opts">
+                                                    <label>type: </label>
+                                                    <select class="ea_type">
+                                                        <option value="">account type</option>
+                                                        <option value="A" selected>asset</option>
+                                                        <option value="L">liability</option>
+                                                        <option value="Q">equity</option>
+                                                        <option value="R">revenue</option>
+                                                        <option value="E">expense</option>
+                                                    </select>
+                                                </div>
+                                                <div class="ea_parent_opts">
+                                                    <label>sub of: </label>
+                                                    <select class="ea_parent">
+                                                        <option value selected>Long-term assets</option>
+                                                    </select>
+                                                </div>
+                                                <div class="ea_pmt_opt" style="display: none;">
+                                                    <label>makes payments: </label>
+                                                    <input class="ea_payments" type="checkbox">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="cred_accts">
+                                        <div class="entry_accts_header">
+                                            <div class="side_label_wrap">
+                                                <span class="credit_label">credits:</span>
+                                            </div>
+                                            <div class="cred_wrap">
+                                                <span class="entry_credits" style="display: none;"></span>
+                                            </div>
+                                        </div>
+                                        <div class="entry_acct">
+                                            <select class="cred_acct" name="cred_acct">
+                                                <option value="">account to credit...</option>
+                                                <option value="Checking x7531" selected>Checking x7531</option>
+                                            </select>
+                                            <button class="rem_cred_acct" style="display: none;">−</button>
+                                            <input class="cred_amt" name="cred_amt" type="number" step="0.01" min="0.01" max="99999.99" placeholder="$0.00" value="2800.00">
+                                        </div>
+                                    </div>
+                                    <div class="entry_summary">
+                                        <button>Submit</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="splash_text">
+                                <p class="splash_lede">Accounts are the buckets to organize everything</p>
+                                <p>Use a template account list, or make all your own</p>
+                                <p>Create any number of custom accounts</p>
+                            </div>
+                        </div>
+                        <div id="splash_entries" class="splash_item">
+                            <div class="splash_text">
+                                <p class="splash_lede">Add entries on the fly</p>
+                                <p>Easily split entries across multiple accounts</p>
+                                <p>Available offline functionality: create journal entries when offline, then sync when you&#x2019;re reconnected</p>
+                                <p>Track frequent items with recurring entries</p>
+                            </div>
+                            <div class="splash_inset">
+                                <div class="entry" data-origentry="{&quot;type&quot;:&quot;exp&quot;}">
+                                    <div class="details">
+                                        <input class="desc" name="desc" placeholder="description" value="BigMart shampoo and cereal">
+                                        <input class="date splashdate" type="date">
+                                    </div>
+                                    <div class="type_container">
+                                        <button class="exp_btn active_type" tabindex="-1">expense</button>
+                                        <button class="inc_btn" tabindex="-1">income</button>
+                                        <button class="tfr_btn" tabindex="-1">transfer</button>
+                                        <button class="gen_btn" tabindex="-1">general</button>
+                                        <button class="split_entry" tabindex="-1" style="display: none;">split</button>
+                                        <button class="add_deb_acct" tabindex="-1" style="display: inline;">add debit</button>
+                                        <button class="add_cred_acct" tabindex="-1" style="display: inline;">add credit</button>
+                                    </div>
+                                    <div class="deb_accts">
+                                        <div class="entry_accts_header">
+                                            <div class="side_label_wrap">
+                                                <span class="debit_label">debits:</span>
+                                            </div>
+                                            <div class="deb_wrap">
+                                                <span class="entry_debits" style="display: inline;">$9.33</span>
+                                            </div>
+                                        </div>
+                                        <div class="entry_acct">
+                                            <select class="deb_acct" name="deb_acct">
+                                                <option value="">expense category...</option>
+                                                <option value="" selected>Personal care</option>
+                                            </select>
+                                            <input class="deb_amt" name="deb_amt" type="number" step="0.01" min="0.01" max="99999.99" placeholder="$0.00" value="5.20">
+                                            <button class="rem_deb_acct" style="display: inline;">−</button>
+                                        </div>
+                                        <div class="entry_acct">
+                                            <select class="deb_acct" name="deb_acct">
+                                                <option value="">expense category...</option>
+                                                <option value="" selected>Groceries</option>
+                                            </select>
+                                            <input class="deb_amt" name="deb_amt" type="number" step="0.01" min="0.01" max="99999.99" placeholder="$0.00" value="4.13">
+                                            <button class="rem_deb_acct" style="display: inline;">−</button>
+                                        </div>
+                                    </div>
+                                    <div class="cred_accts">
+                                        <div class="entry_accts_header">
+                                            <div class="side_label_wrap">
+                                                <span class="credit_label">credits:</span>
+                                            </div>
+                                            <div class="cred_wrap">
+                                                <span class="entry_credits" style="display: none;">$0.00</span>
+                                            </div>
+                                        </div>
+                                        <div class="entry_acct">
+                                            <select class="cred_acct" name="cred_acct">
+                                                <option value="">from account...</option>
+                                                <option value="" selected>Clark&#x2019;s credit card x2468</option>
+                                            </select>
+                                            <button class="rem_cred_acct" style="display: none;">−</button>
+                                            <div id="entry_auto_amount_btn_wrap">
+                                                <button id="entry_auto_amount_btn" data-amount="9.33">9.33</button>
+                                            </div>
+                                            <input class="cred_amt nomargin" name="cred_amt" type="number" step="0.01" min="0.01" max="99999.99" placeholder="$0.00">
+                                        </div>
+                                    </div>
+                                    <div class="entry_summary">
+                                        <button>Submit</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="splash_reports" class="splash_item">
+                            <div class="splash_inset">
+                                <img src="icons/timeline.svg">
+                            </div>
+                            <div class="splash_text">
+                                <p class="splash_lede">To use the symmetry of accounting, apply it over time.</p>
+                                <p>q͜ʘ helps answer your questions about your data by summarizing your entries between two points in time.</p>
+                            </div>
+                        </div>
+                        <div id="splash_tech" class="splash_item">
+                            <div class="splash_text">
+                                <p class="splash_lede">Fast:</p>
+                                <p>q͜ʘ runs in your web browser: use the power of the processor already at your fingertips.</p>
+                                <p>“q͜ʘ”  is the IPA spelling for a &#x2018;bilabial click&#x2019;: a popping sound made with your lips. It expresses how fast and easy it can be for you to take ownership of your own.</p> 
+                            </div>
+                            <div class="splash_inset">
+                                <img src="icons/cpu.svg">
+                            </div>
+                        </div>
+                        <div id="splash_sharing" class="splash_item">
+                            <div class="splash_inset">
+                                <img src="icons/padlock.svg">
+                            </div>
+                            <div class="splash_text">
+                                <p class="splash_lede">Data and sharing:</p>
+                                <p>Your data is stored in your own Google Sheets spreadsheet and, depending on what options you enable, on your device.</p>
+                                <p>q͜ʘ does not send or store your data anywhere else. See the <a title="Privacy Policy" href="privacy-policy.html">Privacy Policy</a> for more details.</p>
+                                <p>q͜ʘ does not want your data. It wants to help you keep your own in order.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="setup_journal_name">
@@ -149,6 +368,6 @@
         <script src="bha-auth-scripts.js?7"></script>
         <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoad()"></script>
         <script async defer src="https://accounts.google.com/gsi/client" onload="gisInit()"></script>
-        <script defer src="bha-scripts.js?10"></script>
+        <script defer src="bha-scripts.js?11"></script>
     </body>
 </html>

@@ -1219,6 +1219,7 @@ async function uploadEntryQueue(callback) {
 }
 
 function entryAddAcctClk(entry_container, side) {
+    console.log(entry_container, side);
     let data = JSON.parse(entry_container.dataset.origentry);
     let type = data.hasOwnProperty('type') ? data.type : '';
     let div = getEntryAcct({side: side, type: type});
@@ -4733,6 +4734,7 @@ function createSpreadsheet() {
                     ['Liabilities', 'L'],
                     ['Credit card', 'LP', 'Liabilities'],
                     ['Vehicle loan', 'L', 'Liabilities'],
+                    ['Home mortgage note', 'L', 'Liabilities'],
                     ['Equity', 'Q'],
                     ['Retained Earnings', 'Q', 'Equity'],
                     ['Income Summary', 'Q', 'Equity'],
@@ -4751,18 +4753,21 @@ function createSpreadsheet() {
                     ['Gas', 'EBD', 'Vehicle'],
                     ['Car insurance', 'EBS', 'Vehicle'],
                     ['Car maintenance', 'EBS', 'Vehicle'],
-                    ['Car loan interest', 'E', 'Vehicle'],
+                    ['Car loan interest', 'EBS', 'Vehicle'],
+                    ['Home mortgage loan interest', 'EBS', 'Expenses'],
                     ['Utilities', 'E', 'Expenses'],
-                    ['Rent', 'EBS', 'Utilities'],
                     ['Cell phone', 'EBS', 'Utilities'],
                     ['Electric', 'EBD', 'Utilities'],
                     ['Water', 'EBD', 'Utilities'],
                     ['Internet & TV', 'EBS', 'Utilities'],
                     ['Trash', 'EBS', 'Utilities'],
                     ['Gas (house)', 'EBS', 'Utilities'],
+                    ['Taxes', 'E', 'Expenses'],
+                    ['Income tax', 'EBS', 'Taxes'],
+                    ['Property tax', 'EBS', 'Taxes'],
                     ['Insurance', 'E', 'Expenses'],
                     ['Health insurance', 'EBS', 'Insurance'],
-                    ['Home/renter\'s insurance', 'EBS', 'Insurance'],
+                    ['Property insurance', 'EBS', 'Insurance'],
                     ['Fun', 'E', 'Expenses'],
                     ['Entertainment', 'EBD', 'Fun'],
                     ['Hobbies', 'EBD', 'Fun'],
@@ -5109,6 +5114,8 @@ if (ssprops) {
     } else {
         goToPage('add_entry');
     }
+} else {
+    document.getElementById('splash').style.display = 'block';
 }
 
 if (localStorage.getItem('last_sync')) {

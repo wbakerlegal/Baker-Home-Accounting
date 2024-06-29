@@ -128,14 +128,6 @@ input:disabled, select:disabled {
 #nav_menu {
     background: url("icons/select_arrow.svg") border-box no-repeat 100% 50%, #F5CD78;
 }
-/*
-#nav_menu:disabled {
-    opacity: 0.7;
-    background: url("icons/select_arrow.svg") border-box no-repeat 100% 50%, #fff;
-    color: #75675F;
-    border: 0.15rem solid #75675F;
-    padding: 0.47rem 1.35rem 0.47rem 0.47rem;
-}*/
 #nav_menu:hover:not(:disabled) {
     background: url("icons/select_arrow.svg") border-box no-repeat 100% 50%, #F5A778;
 }
@@ -636,22 +628,30 @@ button.rem_deb_acct:disabled, button.rem_cred_acct:disabled { /* had to add tag 
 #setup_journal_name, #cancel_edit_journal_name, #save_journal_name, #setup_previous_journals, #remove_saved_ssid {
     display: none;
 }
+
 #splash {
+    display: none;
+}
+#splash_top {
     font-weight: bold;
     color: #F5A778;
     border-radius: 0.35rem;
     background: #75675F;
     border-bottom: 0.35rem solid #78cbf5;
     padding: 3rem 2rem;
-    margin: 1.5rem 0;
+    margin: 1.5rem 0 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
+#splash_get_started {
+    margin: 0.5rem 0;
+    text-align: right;
+}
 #splash_title {
     font-size: 1.62rem;
 }
-#splash img {
+#splash_top img {
     width: 4rem;
     height: 4rem;
 }
@@ -659,6 +659,91 @@ button.rem_deb_acct:disabled, button.rem_cred_acct:disabled { /* had to add tag 
     font-size: 1rem;
     text-align: center;
 }
+.splash_item {
+    border-radius: 0.35rem;
+    padding: 1rem 1.5rem;
+    margin: 0.5rem 0 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+.splash_inset {
+    position: relative;
+    border-radius: 50%;
+    height: 10rem;
+    width: 10rem;
+    flex: 0 0 10rem;
+}
+.splash_inset img {
+    height: 10rem;
+    width: 10rem;
+}
+.splash_lede {
+    font-weight: bold;
+}
+#splash_accounts .splash_inset, 
+#splash_entries .splash_inset {
+    flex: 0 0 16rem;
+    width: 16rem;
+    height: 16rem;
+    background: #fff;
+    overflow: clip;
+}
+#splash_accounts .splash_inset .entry, 
+#splash_entries .splash_inset .entry {
+    zoom: 0.7;
+    position: absolute;
+    width: 24rem;
+    top: 50%;
+    left: 50%;
+}
+#splash_accounts .splash_inset .entry {
+    transform: translate(-40%, -40%);
+}
+#splash_entries .splash_inset .entry {
+    transform: translate(-53%, -42%);
+}
+#splash_reports .splash_inset,
+#splash_tech .splash_inset {
+    background: #fff;
+}
+#splash_entries #entry_auto_amount_btn,
+#splash_entries .add_deb_acct {
+    background: #F5A778;
+}
+
+#splash_intro,
+#splash_entries,
+#splash_sharing {
+    background: #DAEDF7;
+}
+#splash_sharing {
+    background: #daedf7;
+}
+#splash_accounts {
+    background: #75675f;
+}
+#splash_reports {
+    background:#5f6e75;
+}
+#splash_tech {
+    background: #f5cd78;
+}
+#splash_intro .splash_text,
+#splash_sharing .splash_text {
+    color: #5F6E75;
+}
+#splash_accounts .splash_text {
+    color:#daedf7;
+}
+#splash_entries .splash_text,
+#splash_tech .splash_text {
+    color: #75675f;
+}
+#splash_reports .splash_text {
+    color: #f5a778;
+}
+
 #setup_journal_name {
     padding-bottom: 1.33em;
     border-bottom: 2px solid #F5CD78;
@@ -718,6 +803,12 @@ button.rem_deb_acct:disabled, button.rem_cred_acct:disabled { /* had to add tag 
     }
     #splash {
         margin: 0.5rem 0;
+    }
+    .splash_item {
+        display: block;
+    }
+    .splash_inset {
+        margin:0.5rem auto;
     }
     .main {
         padding: 0 0.5rem;
